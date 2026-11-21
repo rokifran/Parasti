@@ -43,8 +43,8 @@ import { requestOnce as previewRequest } from './linkFetch';
 
 // Bootstrap
 
-const authEnv = loadAuthEnv();
-if (!authEnv) {
+const loadedAuthEnv = loadAuthEnv();
+if (!loadedAuthEnv) {
   console.error('[server] Missing AUTH_USERNAME / AUTH_PASSWORD / AUTH_SECRET.');
   console.error('[server] Create a .dev.vars in the project root with:');
   console.error('  AUTH_USERNAME=admin');
@@ -52,6 +52,9 @@ if (!authEnv) {
   console.error('  AUTH_SECRET=any-long-string-here');
   process.exit(1);
 }
+// Hoisted functions cannot see the narrowing above (they may run before the
+// guard), so the narrowed value is re-bound with a non-null type.
+const authEnv: AuthEnv = loadedAuthEnv;
 
 const migResult = runMigrations();
 if (migResult.applied.length > 0) {
@@ -849,7 +852,7 @@ app.post('/api/pages/import', (req, res) => {
   const page: any = normalizePage(db.prepare('SELECT * FROM pages WHERE id = ?').get(id) as Row);
   const insertedBlocks = db.prepare(
     'SELECT * FROM blocks WHERE page_id = ? ORDER BY position ASC'
-  ).all(id).map(normalizeBlock);
+  ).all(id).map(b => normalizeBlock(b as Row));
   page.blocks = insertedBlocks;
   res.json({ page });
 });
@@ -866,7 +869,7 @@ app.get('/api/pages/:id', (req, res) => {
   }
   const blocks = db.prepare(
     'SELECT * FROM blocks WHERE page_id = ? ORDER BY position ASC'
-  ).all(id).map(normalizeBlock);
+  ).all(id).map(b => normalizeBlock(b as Row));
   res.json({ page: { ...normalizePage(page), blocks } });
 });
 
@@ -1005,7 +1008,7 @@ app.post('/api/pages/:pageId/blocks', (req, res) => {
     'INSERT INTO blocks (id, page_id, type, content, position, parent_id, language, props) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(id, pageId, type, content, position, parent_id, language, props);
 
-  const block = db.prepare('SELECT * FROM blocks WHERE id = ?').get(id);
+  const block = db.prepare('SELECT * FROM blocks WHERE id = ?').get(id) as Row;
   res.json({ block: normalizeBlock(block) });
 });
 
@@ -1051,7 +1054,7 @@ app.put('/api/blocks/:id', (req, res) => {
     db.prepare(`UPDATE blocks SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   }
 
-  const block = db.prepare('SELECT * FROM blocks WHERE id = ?').get(id);
+  const block = db.prepare('SELECT * FROM blocks WHERE id = ?').get(id) as Row;
   res.json({ block: normalizeBlock(block) });
 });
 

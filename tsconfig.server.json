@@ -1,0 +1,20 @@
+// Type-check only for the local backend (server/). The app build (tsconfig.json)
+// covers src/, functions/ and worker/, so server/index.ts never runs through
+// tsc — this config closes that gap. Run with: pnpm run typecheck
+//
+// lib DOM is needed because server/shared/ (e.g. passwords.ts) uses Web Crypto
+// types (BufferSource) that live in the DOM lib, same as tsconfig.json.
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["server/**/*.ts"]
+}

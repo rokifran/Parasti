@@ -9,6 +9,7 @@ import './styles/media.css';
 import './styles/pages.css';
 import './styles/editor.css';
 import './styles/calendar.css';
+import './styles/tasks.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -3,6 +3,14 @@ import type { Context } from 'hono';
 import { parseMarkdownToBlocks, blocksToMarkdown } from '../../server/shared/markdown';
 import { parseBlockProps, serializeBlockProps } from '../../server/shared/blockProps';
 import { validateEventInput, validateEventRange } from '../../server/shared/events';
+import { parseFeatures } from '../../server/shared/features';
+import {
+  validateTaskInput,
+  todayIn,
+  taskBucket,
+  isValidYmd,
+  TASK_STATUSES,
+} from '../../server/shared/tasks';
 import { validateUsername, validatePassword, validateDisplayName } from '../../server/shared/users';
 import { hashPassword, verifyPassword, PBKDF2_ITERATIONS } from '../../server/shared/passwords';
 import {
@@ -19,6 +27,11 @@ type Bindings = {
   AUTH_USERNAME: string;
   AUTH_PASSWORD: string;
   AUTH_SECRET: string;
+  FEATURES?: string;
+  TIMEZONE?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_TOKEN_KEY?: string;
 };
 
 interface CurrentUser {
@@ -276,6 +289,22 @@ async function ensureSchema(db: D1Database) {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        due_time TEXT,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done', 'cancelled')),
+        page_id TEXT,
+        completed_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_tasks_owner_due ON tasks(owner_user_id, due_date);
     `
         .split(';')
         .map((s) => s.trim())
@@ -357,6 +386,26 @@ app.use('*', async (c, next) => {
     }
   }
   await next();
+});
+
+// Optional modules (plan-04a T7/T8). A disabled module answers 404 like a
+// route that does not exist, and the UI hides its entry points.
+function featureEnabled(c: Context<AppEnv>, name: string): boolean {
+  return parseFeatures(c.env.FEATURES).includes(name);
+}
+
+function timezoneOf(c: Context<AppEnv>): string {
+  return (c.env.TIMEZONE || '').trim() || 'Asia/Jakarta';
+}
+
+// GET /api/config — public on purpose: the client needs to know which modules
+// are active before login (plan-04a T9/T10).
+app.get('/config', (c) => {
+  const features = parseFeatures(c.env.FEATURES);
+  const googleConfigured =
+    Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET && c.env.GOOGLE_TOKEN_KEY) &&
+    features.includes('google');
+  return c.json({ features, timezone: timezoneOf(c), googleConfigured });
 });
 
 app.post('/auth/login', async (c) => {
@@ -560,6 +609,8 @@ app.use('/admin/*', authMiddleware);
 app.use('/admin/*', adminMiddleware);
 app.use('/events', authMiddleware);
 app.use('/events/*', authMiddleware);
+app.use('/tasks', authMiddleware);
+app.use('/tasks/*', authMiddleware);
 
 app.post('/auth/token', async (c) => {
   const env = requireEnv(c);
@@ -1585,6 +1636,183 @@ app.delete('/events/:id', async (c) => {
   if (!existing) return c.json({ error: 'Not found' }, 404);
   const { meta } = await c.env.DB.prepare('DELETE FROM events WHERE id = ?').bind(id).run();
   return c.json({ success: true, deleted: meta.changes });
+});
+
+// 9b.6 Tasks (auth-gated, module-gated) -------------------------------------
+// Same contract as the Express backend (server/index.ts). Task ownership is
+// the creator (`owner_user_id`); sharing does not apply (plan-04a T3).
+
+const TASK_DUE_FILTERS = ['overdue', 'today', 'upcoming', 'actionable', 'all'];
+const TASK_STATUS_FILTERS = [...TASK_STATUSES, 'all'];
+const TASK_SELECT = 'SELECT id, title, due_date, due_time, status, page_id, completed_at FROM tasks';
+
+function toTask(row: any, today: string) {
+  return {
+    id: row.id,
+    title: row.title,
+    due_date: row.due_date,
+    due_time: row.due_time ?? null,
+    status: row.status,
+    page_id: row.page_id ?? null,
+    completed_at: row.completed_at ?? null,
+    bucket: taskBucket(row, today),
+  };
+}
+
+app.get('/tasks', async (c) => {
+  if (!featureEnabled(c, 'tasks')) return c.json({ error: 'Not found' }, 404);
+
+  const due = c.req.query('due') || 'all';
+  if (!TASK_DUE_FILTERS.includes(due)) return c.json({ error: 'Invalid due filter' }, 400);
+
+  const rawStatus = c.req.query('status');
+  const status = rawStatus || (due === 'all' ? 'all' : 'open');
+  if (!TASK_STATUS_FILTERS.includes(status)) return c.json({ error: 'Invalid status filter' }, 400);
+
+  const from = c.req.query('from') || '';
+  const to = c.req.query('to') || '';
+  if ((from && !isValidYmd(from)) || (to && !isValidYmd(to)) || (from && to && from > to)) {
+    return c.json({ error: 'Invalid date range' }, 400);
+  }
+
+  const user = c.get('user');
+  const timezone = timezoneOf(c);
+  const today = todayIn(timezone);
+  const wheres = ['owner_user_id = ?'];
+  const params: any[] = [user.id];
+
+  if (due === 'overdue') {
+    wheres.push('due_date < ?');
+    params.push(today);
+  } else if (due === 'today') {
+    wheres.push('due_date = ?');
+    params.push(today);
+  } else if (due === 'upcoming') {
+    wheres.push('due_date > ?');
+    params.push(today);
+  } else if (due === 'actionable') {
+    wheres.push('due_date <= ?');
+    params.push(today);
+  }
+
+  if (status !== 'all') {
+    wheres.push('status = ?');
+    params.push(status);
+  }
+  if (from) {
+    wheres.push('due_date >= ?');
+    params.push(from);
+  }
+  if (to) {
+    wheres.push('due_date <= ?');
+    params.push(to);
+  }
+
+  const { results } = await c.env.DB
+    .prepare(
+      `${TASK_SELECT} WHERE ${wheres.join(' AND ')}
+       ORDER BY due_date ASC, (due_time IS NULL) DESC, due_time ASC, id ASC`
+    )
+    .bind(...params)
+    .all();
+
+  return c.json({
+    tasks: (results || []).map((row: any) => toTask(row, today)),
+    today,
+    timezone,
+  });
+});
+
+app.post('/tasks', async (c) => {
+  if (!featureEnabled(c, 'tasks')) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json().catch(() => null);
+  const v = validateTaskInput(body, false);
+  if ('error' in v) return c.json({ error: v.error }, 400);
+
+  const user = c.get('user');
+  const pageId = v.value.page_id ?? null;
+  if (pageId && !(await pageOwnedBy(c.env.DB, pageId, user.id))) {
+    return c.json({ error: 'Page not found' }, 400);
+  }
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO tasks (id, owner_user_id, title, due_date, due_time, status, page_id)
+     VALUES (?, ?, ?, ?, ?, 'open', ?)`
+  ).bind(id, user.id, v.value.title, v.value.due_date, v.value.due_time ?? null, pageId).run();
+
+  const row = await c.env.DB.prepare(`${TASK_SELECT} WHERE id = ?`).bind(id).first();
+  return c.json({ task: toTask(row, todayIn(timezoneOf(c))) });
+});
+
+app.patch('/tasks/:id', async (c) => {
+  if (!featureEnabled(c, 'tasks')) return c.json({ error: 'Not found' }, 404);
+
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const existing: any = await c.env.DB
+    .prepare('SELECT * FROM tasks WHERE id = ? AND owner_user_id = ?')
+    .bind(id, user.id)
+    .first();
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json().catch(() => null);
+  const v = validateTaskInput(body, true);
+  if ('error' in v) return c.json({ error: v.error }, 400);
+
+  if (v.value.page_id && !(await pageOwnedBy(c.env.DB, v.value.page_id, user.id))) {
+    return c.json({ error: 'Page not found' }, 400);
+  }
+
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (v.value.title !== undefined) {
+    sets.push('title = ?');
+    params.push(v.value.title);
+  }
+  if (v.value.due_date !== undefined) {
+    sets.push('due_date = ?');
+    params.push(v.value.due_date);
+  }
+  if (v.value.due_time !== undefined) {
+    sets.push('due_time = ?');
+    params.push(v.value.due_time);
+  }
+  if (v.value.status !== undefined) {
+    sets.push('status = ?');
+    params.push(v.value.status);
+    if (v.value.status === 'done' && existing.status !== 'done') {
+      sets.push("completed_at = datetime('now')");
+    } else if (v.value.status !== 'done' && existing.status === 'done') {
+      sets.push('completed_at = NULL');
+    }
+  }
+  if (v.value.page_id !== undefined) {
+    sets.push('page_id = ?');
+    params.push(v.value.page_id);
+  }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+
+  await c.env.DB.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+  const row = await c.env.DB.prepare(`${TASK_SELECT} WHERE id = ?`).bind(id).first();
+  return c.json({ task: toTask(row, todayIn(timezoneOf(c))) });
+});
+
+app.delete('/tasks/:id', async (c) => {
+  if (!featureEnabled(c, 'tasks')) return c.json({ error: 'Not found' }, 404);
+
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const existing = await c.env.DB
+    .prepare('SELECT id FROM tasks WHERE id = ? AND owner_user_id = ?')
+    .bind(id, user.id)
+    .first();
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  await c.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run();
+  return c.json({ success: true });
 });
 
 // 10. POST /api/files/upload — R2 is the only binary backend. There is no D1

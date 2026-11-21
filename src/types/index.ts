@@ -134,6 +134,26 @@ export interface CalendarEvent {
   updated_at: string;
 }
 
+export type TaskBucket = 'overdue' | 'today' | 'upcoming' | 'done' | 'cancelled';
+
+// A task belongs to its creator; there is no assignee and no sharing.
+export interface Task {
+  id: string;
+  title: string;
+  due_date: string;
+  due_time: string | null;
+  status: 'open' | 'done' | 'cancelled';
+  page_id: string | null;
+  completed_at: string | null;
+  bucket: TaskBucket;
+}
+
+export interface AppConfig {
+  features: string[];
+  timezone: string;
+  googleConfigured: boolean;
+}
+
 export interface FileInfo {
   id: string;
   name: string;

@@ -579,6 +579,102 @@ server.tool(
   }
 );
 
+// Tool: list_tasks
+server.tool(
+  'list_tasks',
+  'List tasks in Parasti. Can work through overdue tasks and today\'s tasks. "Today" follows the institution\'s TIMEZONE, not the server clock or the caller\'s timezone.',
+  {
+    due: z.enum(['overdue', 'today', 'upcoming', 'actionable', 'all']).optional().describe('Bucket to list. "actionable" = overdue + today. Defaults to actionable.'),
+    status: z.enum(['open', 'done', 'cancelled', 'all']).optional().describe('Status filter. Default: open for dated buckets, all when due is "all".'),
+  },
+  async ({ due, status }) => {
+    try {
+      const query = new URLSearchParams();
+      query.set('due', due || 'actionable');
+      if (status) query.set('status', status);
+      const res = await apiRequest<{ tasks: any[]; today: string; timezone: string }>(
+        `/api/tasks?${query.toString()}`
+      );
+      return {
+        content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to list tasks: ${err.message}` }],
+      };
+    }
+  }
+);
+
+// Tool: create_task
+server.tool(
+  'create_task',
+  'Create a task in Parasti with a due date and an optional time. Tasks belong to the token\'s owner.',
+  {
+    title: z.string().describe('Task title, 1-200 characters'),
+    due_date: z.string().describe('Due date in YYYY-MM-DD format'),
+    due_time: z.string().optional().describe('Optional time in HH:MM (24h). Omit for an all-day task.'),
+  },
+  async ({ title, due_date, due_time }) => {
+    try {
+      const res = await apiRequest<{ task: any }>('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          due_date,
+          due_time: due_time?.trim() || null,
+        }),
+      });
+      const task = res.task;
+      const time = task.due_time ? ` at ${task.due_time}` : '';
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Created task "${task.title}" due ${task.due_date}${time} (ID: ${task.id})`,
+          },
+        ],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to create task: ${err.message}` }],
+      };
+    }
+  }
+);
+
+// Tool: complete_task
+server.tool(
+  'complete_task',
+  'Mark a Parasti task as done.',
+  {
+    id: z.string().describe('ID of the task to complete'),
+  },
+  async ({ id }) => {
+    try {
+      const res = await apiRequest<{ task: any }>(`/api/tasks/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'done' }),
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Completed task "${res.task.title}" (ID: ${res.task.id})`,
+          },
+        ],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to complete task: ${err.message}` }],
+      };
+    }
+  }
+);
+
 // Tool: create_project
 server.tool(
   'create_project',

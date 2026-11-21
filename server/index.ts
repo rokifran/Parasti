@@ -29,6 +29,15 @@ const STORED_FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 import { parseMarkdownToBlocks, blocksToMarkdown } from './shared/markdown';
 import { serializeBlockProps } from './shared/blockProps';
 import { validateEventInput, validateEventRange } from './shared/events';
+import { parseFeatures } from './shared/features';
+import {
+  validateTaskInput,
+  todayIn,
+  taskBucket,
+  isValidYmd,
+  TASK_STATUSES,
+} from './shared/tasks';
+import { readEnv } from './shared/env';
 import { fetchLinkPreview, LinkPreviewError } from './shared/linkPreview';
 import { requestOnce as previewRequest } from './linkFetch';
 
@@ -185,6 +194,26 @@ function pageOwnedBy(pageId: string, userId: string): boolean {
   const row: any = db.prepare('SELECT owner_user_id FROM pages WHERE id = ?').get(pageId);
   return !!row && row.owner_user_id === userId;
 }
+
+// Optional modules (plan-04a T7/T8). Read per request so a restart with a new
+// FEATURES value takes effect without touching code.
+function featureEnabled(name: string): boolean {
+  return parseFeatures(readEnv('FEATURES')).includes(name);
+}
+
+function timezoneOf(): string {
+  return (readEnv('TIMEZONE') || '').trim() || 'Asia/Jakarta';
+}
+
+// GET /api/config — public on purpose: the client needs to know which modules
+// are active before login (plan-04a T9/T10).
+app.get('/api/config', (_req: Request, res: Response) => {
+  const features = parseFeatures(readEnv('FEATURES'));
+  const googleConfigured =
+    Boolean(readEnv('GOOGLE_CLIENT_ID') && readEnv('GOOGLE_CLIENT_SECRET') && readEnv('GOOGLE_TOKEN_KEY')) &&
+    features.includes('google');
+  return res.json({ features, timezone: timezoneOf(), googleConfigured });
+});
 
 // Routes
 
@@ -490,6 +519,7 @@ app.use('/api/files/upload', requireAuth);
 app.use('/api/workspace', requireAuth);
 app.use('/api/link-preview', requireAuth);
 app.use('/api/events', requireAuth);
+app.use('/api/tasks', requireAuth);
 
 // GET /api/workspace — returns the singleton with the current name and icon.
 app.get('/api/workspace', (_req, res) => {
@@ -1188,6 +1218,174 @@ app.delete('/api/events/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const info = db.prepare('DELETE FROM events WHERE id = ?').run(id);
   res.json({ success: true, deleted: info.changes });
+});
+
+// 9b.6 Tasks (auth-gated, module-gated) -------------------------------------
+// Same contract as the Hono backend (functions/api/[[route]].ts). Task
+// ownership is the creator (`owner_user_id`); sharing does not apply.
+
+const TASK_DUE_FILTERS = ['overdue', 'today', 'upcoming', 'actionable', 'all'];
+const TASK_STATUS_FILTERS = [...TASK_STATUSES, 'all'];
+const TASK_SELECT = 'SELECT id, title, due_date, due_time, status, page_id, completed_at FROM tasks';
+
+function toTask(row: any, today: string) {
+  return {
+    id: row.id,
+    title: row.title,
+    due_date: row.due_date,
+    due_time: row.due_time ?? null,
+    status: row.status,
+    page_id: row.page_id ?? null,
+    completed_at: row.completed_at ?? null,
+    bucket: taskBucket(row, today),
+  };
+}
+
+app.get('/api/tasks', (req, res) => {
+  if (!featureEnabled('tasks')) return res.status(404).json({ error: 'Not found' });
+
+  const due = String(req.query.due || '') || 'all';
+  if (!TASK_DUE_FILTERS.includes(due)) return res.status(400).json({ error: 'Invalid due filter' });
+
+  const rawStatus = String(req.query.status || '');
+  const status = rawStatus || (due === 'all' ? 'all' : 'open');
+  if (!TASK_STATUS_FILTERS.includes(status)) return res.status(400).json({ error: 'Invalid status filter' });
+
+  const from = String(req.query.from || '');
+  const to = String(req.query.to || '');
+  if ((from && !isValidYmd(from)) || (to && !isValidYmd(to)) || (from && to && from > to)) {
+    return res.status(400).json({ error: 'Invalid date range' });
+  }
+
+  const user = res.locals.user;
+  const timezone = timezoneOf();
+  const today = todayIn(timezone);
+  const wheres = ['owner_user_id = ?'];
+  const params: any[] = [user.id];
+
+  if (due === 'overdue') {
+    wheres.push('due_date < ?');
+    params.push(today);
+  } else if (due === 'today') {
+    wheres.push('due_date = ?');
+    params.push(today);
+  } else if (due === 'upcoming') {
+    wheres.push('due_date > ?');
+    params.push(today);
+  } else if (due === 'actionable') {
+    wheres.push('due_date <= ?');
+    params.push(today);
+  }
+
+  if (status !== 'all') {
+    wheres.push('status = ?');
+    params.push(status);
+  }
+  if (from) {
+    wheres.push('due_date >= ?');
+    params.push(from);
+  }
+  if (to) {
+    wheres.push('due_date <= ?');
+    params.push(to);
+  }
+
+  const rows: any[] = db
+    .prepare(
+      `${TASK_SELECT} WHERE ${wheres.join(' AND ')}
+       ORDER BY due_date ASC, (due_time IS NULL) DESC, due_time ASC, id ASC`
+    )
+    .all(...params);
+
+  res.json({ tasks: rows.map(row => toTask(row, today)), today, timezone });
+});
+
+app.post('/api/tasks', (req, res) => {
+  if (!featureEnabled('tasks')) return res.status(404).json({ error: 'Not found' });
+
+  const v = validateTaskInput(req.body, false);
+  if ('error' in v) return res.status(400).json({ error: v.error });
+
+  const user = res.locals.user;
+  const pageId = v.value.page_id ?? null;
+  if (pageId && !pageOwnedBy(pageId, user.id)) {
+    return res.status(400).json({ error: 'Page not found' });
+  }
+
+  const id = crypto.randomUUID();
+  db.prepare(
+    `INSERT INTO tasks (id, owner_user_id, title, due_date, due_time, status, page_id)
+     VALUES (?, ?, ?, ?, ?, 'open', ?)`
+  ).run(id, user.id, v.value.title, v.value.due_date, v.value.due_time ?? null, pageId);
+
+  const row: any = db.prepare(`${TASK_SELECT} WHERE id = ?`).get(id);
+  res.json({ task: toTask(row, todayIn(timezoneOf())) });
+});
+
+app.patch('/api/tasks/:id', (req, res) => {
+  if (!featureEnabled('tasks')) return res.status(404).json({ error: 'Not found' });
+
+  const id = req.params.id;
+  const user = res.locals.user;
+  const existing: any = db
+    .prepare('SELECT * FROM tasks WHERE id = ? AND owner_user_id = ?')
+    .get(id, user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  const v = validateTaskInput(req.body, true);
+  if ('error' in v) return res.status(400).json({ error: v.error });
+
+  if (v.value.page_id && !pageOwnedBy(v.value.page_id, user.id)) {
+    return res.status(400).json({ error: 'Page not found' });
+  }
+
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (v.value.title !== undefined) {
+    sets.push('title = ?');
+    params.push(v.value.title);
+  }
+  if (v.value.due_date !== undefined) {
+    sets.push('due_date = ?');
+    params.push(v.value.due_date);
+  }
+  if (v.value.due_time !== undefined) {
+    sets.push('due_time = ?');
+    params.push(v.value.due_time);
+  }
+  if (v.value.status !== undefined) {
+    sets.push('status = ?');
+    params.push(v.value.status);
+    if (v.value.status === 'done' && existing.status !== 'done') {
+      sets.push("completed_at = datetime('now')");
+    } else if (v.value.status !== 'done' && existing.status === 'done') {
+      sets.push('completed_at = NULL');
+    }
+  }
+  if (v.value.page_id !== undefined) {
+    sets.push('page_id = ?');
+    params.push(v.value.page_id);
+  }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+
+  db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const row: any = db.prepare(`${TASK_SELECT} WHERE id = ?`).get(id);
+  res.json({ task: toTask(row, todayIn(timezoneOf())) });
+});
+
+app.delete('/api/tasks/:id', (req, res) => {
+  if (!featureEnabled('tasks')) return res.status(404).json({ error: 'Not found' });
+
+  const id = req.params.id;
+  const user = res.locals.user;
+  const existing = db
+    .prepare('SELECT id FROM tasks WHERE id = ? AND owner_user_id = ?')
+    .get(id, user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  res.json({ success: true });
 });
 
 // 9c. GET /api/link-preview?url=... — title, description, image, site name and

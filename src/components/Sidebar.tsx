@@ -4,6 +4,7 @@ import { usePageContext, buildPageTree } from '../contexts/PageContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { Page } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfig } from '../contexts/ConfigContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import { api } from '../api/client';
 import {
@@ -21,6 +22,7 @@ import {
   MoonIcon,
   TrashIcon,
   CalendarIcon,
+  CheckSquareIcon,
 } from './Icons';
 import { StarIcon, StarFilledIcon, DuplicateIcon } from './PageIcons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -488,6 +490,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   const { workspace } = useWorkspace();
   const tree = useMemo(() => buildPageTree(pages), [pages]);
   const { user } = useAuth();
+  const { hasFeature } = useConfig();
   const {
     isMobile,
     isNarrow,
@@ -870,6 +873,16 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
         {/* Trash entry, pinned above the footer */}
         {!collapsed && (
           <>
+            {hasFeature('tasks') && (
+              <button
+                type="button"
+                className="sidebar-trash-row"
+                onClick={() => navigate('/tasks')}
+              >
+                <CheckSquareIcon size={15} />
+                <span>{t('tasks.title')}</span>
+              </button>
+            )}
             <button
               type="button"
               className="sidebar-trash-row"
@@ -956,6 +969,16 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
 
         {collapsed && (
           <div className="sidebar-footer sidebar-footer--collapsed">
+            {hasFeature('tasks') && (
+              <button
+                className="sidebar-btn"
+                onClick={() => navigate('/tasks')}
+                title={t('tasks.title')}
+                aria-label={t('tasks.title')}
+              >
+                <CheckSquareIcon size={16} />
+              </button>
+            )}
             <button
               className="sidebar-btn"
               onClick={() => navigate('/calendar')}

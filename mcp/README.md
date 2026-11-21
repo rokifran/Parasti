@@ -51,10 +51,26 @@ sharing one username and password.
 | `list_events` | `from` *(string, optional, `YYYY-MM-DD`)*<br>`to` *(string, optional, `YYYY-MM-DD`)* | Lists events, optionally restricted to an inclusive date range. Provide both bounds or neither. |
 | `update_event` | `eventId` *(string, required)*<br>`title` *(string, required)*<br>`event_date` *(string, required, `YYYY-MM-DD`)*<br>`start_time` *(string, optional, `HH:MM`)*<br>`end_time` *(string, optional, `HH:MM`)* | Replaces an event. All fields must be supplied; this is not a partial update. |
 | `delete_event` | `eventId` *(string, required)* | Permanently deletes an event. Destructive: only call after the user confirms. |
+| `list_tasks` | `due` *(string, optional: `overdue` \| `today` \| `upcoming` \| `actionable` \| `all`, default `actionable`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled` \| `all`)* | Lists tasks. `actionable` means overdue + today; "today" follows the institution timezone. |
+| `create_task` | `title` *(string, required)*<br>`due_date` *(string, required, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)* | Creates a task. Omit `due_time` for an all-day task. |
+| `complete_task` | `id` *(string, required)* | Marks a task as done. |
 | `create_project` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)* | Creates a root page flagged as a project. |
 | `list_projects` | *(none)* | Lists projects (root pages with `is_project`). |
 | `create_page` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)*<br>`parentId` *(string, optional)* | Creates an empty page, optionally nested under a project or private page. |
 | `upload_image` | `filePath` *(string, required)*<br>`pageId` *(string, required)*<br>`afterBlockId` *(string, optional)*<br>`positionIndex` *(number, optional)*<br>`caption` *(string, optional)*<br>`alt` *(string, optional)* | Uploads a local image (png, jpg, gif, webp, svg, bmp, avif; max 25 MB) as an image block. Inserts after a block, before an index, or appends at the end. |
+
+---
+
+## Example Questions for the Agent
+
+- "Apa tugas yang harus saya kerjakan hari ini?"
+- "Tugas apa yang sudah terlambat?"
+- "Buat tugas 'Kirim laporan' untuk besok."
+- "Tandai tugas <id> sebagai selesai."
+
+The agent reads tasks through `list_tasks`; overdue and today are decided by
+the server's `TIMEZONE`, so asking on a phone in another timezone still matches
+the institution's calendar.
 
 ---
 

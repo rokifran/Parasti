@@ -111,6 +111,8 @@ function healSchema(): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_pages_owner ON pages(owner_user_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_events_owner ON events(owner_user_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)');
+  // Task index from 0010.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_owner_due ON tasks(owner_user_id, due_date)');
 }
 
 // Helper: converts the 0/1 flags SQLite stores on a page into booleans, so the

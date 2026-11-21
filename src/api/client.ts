@@ -1,4 +1,4 @@
-import type { Page, PageWithBlocks, Block, BlockProps, FileInfo, SearchResult, TrashedPage, CalendarEvent } from '../types';
+import type { Page, PageWithBlocks, Block, BlockProps, FileInfo, SearchResult, TrashedPage, CalendarEvent, Task, AppConfig } from '../types';
 
 export class ApiError extends Error {
   status: number;
@@ -31,7 +31,8 @@ export interface AdminUser {
 const API_BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('auth_token');
+  // /config is public: never attach a stale bearer token to it.
+  const token = path === '/config' ? null : localStorage.getItem('auth_token');
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -263,6 +264,26 @@ export const api = {
     update: (id: string, data: { title: string; event_date: string; start_time?: string | null; end_time?: string | null }) =>
       request<{ event: CalendarEvent }>(`/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id: string) => request<{ success: boolean }>(`/events/${id}`, { method: 'DELETE' }),
+  },
+  config: {
+    get: () => request<AppConfig>('/config'),
+  },
+  tasks: {
+    list: (params?: { due?: string; status?: string; from?: string; to?: string }) => {
+      const qs = new URLSearchParams();
+      for (const [key, value] of Object.entries(params || {})) {
+        if (value) qs.set(key, value);
+      }
+      const query = qs.toString();
+      return request<{ tasks: Task[]; today: string; timezone: string }>(`/tasks${query ? `?${query}` : ''}`);
+    },
+    create: (data: { title: string; due_date: string; due_time?: string | null; page_id?: string | null }) =>
+      request<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
+    update: (
+      id: string,
+      data: Partial<Pick<Task, 'title' | 'due_date' | 'due_time' | 'status' | 'page_id'>>
+    ) => request<{ task: Task }>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    remove: (id: string) => request<{ success: boolean }>(`/tasks/${id}`, { method: 'DELETE' }),
   },
   workspace: {
     get: () => request<{ name: string; icon: string }>('/workspace'),

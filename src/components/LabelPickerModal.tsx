@@ -14,7 +14,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   selected: string[];
-  onApply: (ids: string[]) => void;
+  onApply: (ids: string[], labels: Label[]) => void;
 }
 
 export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
@@ -130,7 +130,10 @@ export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
           <button
             type="button"
             className="event-modal-save"
-            onClick={() => { onApply(ids); onClose(); }}
+            onClick={() => {
+              onApply(ids, labels.filter(label => ids.includes(label.id)));
+              onClose();
+            }}
           >
             {t('labels.apply')}
           </button>

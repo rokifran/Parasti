@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { api } from '../api/client';
-import { CalendarEvent } from '../types';
+import { CalendarEvent, Label } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
@@ -258,6 +258,7 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
   const [start, setStart] = useState(event?.start_time ?? '');
   const [end, setEnd] = useState(event?.end_time ?? '');
   const [labelIds, setLabelIds] = useState<string[]>(event?.labels?.map(l => l.id) ?? []);
+  const [pickedLabels, setPickedLabels] = useState<Label[]>(event?.labels ?? []);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -344,7 +345,7 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
             </div>
             {!start && <div className="event-modal-hint">{t('calendar.allDay')}</div>}
             <div className="event-modal-labels">
-              {event?.labels?.map(l => (
+              {pickedLabels.map(l => (
                 <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
               ))}
               <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
@@ -372,7 +373,7 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
         open={labelPickerOpen}
         onClose={() => setLabelPickerOpen(false)}
         selected={labelIds}
-        onApply={setLabelIds}
+        onApply={(ids, labels) => { setLabelIds(ids); setPickedLabels(labels); }}
       />
 
       <ConfirmDialog

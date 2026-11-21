@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api/client';
-import type { Task } from '../types';
+import type { Label, Task } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
@@ -24,6 +24,7 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
   const [status, setStatus] = useState<Task['status']>(task.status);
   const [priority, setPriority] = useState<Task['priority']>(task.priority ?? 'normal');
   const [labelIds, setLabelIds] = useState<string[]>(task.labels?.map(l => l.id) ?? []);
+  const [pickedLabels, setPickedLabels] = useState<Label[]>(task.labels ?? []);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +124,7 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
               </label>
             </div>
             <div className="event-modal-labels">
-              {task.labels?.map(l => (
+              {pickedLabels.map(l => (
                 <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
               ))}
               <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
@@ -149,7 +150,7 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
         open={labelPickerOpen}
         onClose={() => setLabelPickerOpen(false)}
         selected={labelIds}
-        onApply={setLabelIds}
+        onApply={(ids, labels) => { setLabelIds(ids); setPickedLabels(labels); }}
       />
 
       <ConfirmDialog

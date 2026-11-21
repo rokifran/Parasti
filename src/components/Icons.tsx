@@ -438,6 +438,20 @@ export function CheckSquareIcon({ size = 16, ...rest }: IconProps) {
   );
 }
 
+export function TagIcon({ size = 16, ...rest }: IconProps) {
+  return (
+    <motion.svg
+      {...base(size)}
+      whileHover={{ scale: 1.1 }}
+      transition={springTransition}
+      {...rest}
+    >
+      <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </motion.svg>
+  );
+}
+
 export function ListBulletIcon({ size = 16, ...rest }: IconProps) {
   return (
     <motion.svg
@@ -446,7 +460,6 @@ export function ListBulletIcon({ size = 16, ...rest }: IconProps) {
       transition={springTransition}
       {...rest}
     >
-      <line x1="9" y1="6" x2="20" y2="6" />
       <line x1="9" y1="12" x2="20" y2="12" />
       <line x1="9" y1="18" x2="20" y2="18" />
       <circle cx="4" cy="6" r="1" fill="var(--icon-color, currentColor)" />

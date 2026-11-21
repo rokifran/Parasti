@@ -7,6 +7,7 @@ import { api } from '../api/client';
 import type { Task } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
+import { LabelPickerModal } from './LabelPickerModal';
 import { CheckSquareIcon, LoaderIcon, XIcon } from './Icons';
 
 interface Props {
@@ -21,6 +22,9 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
   const [dueDate, setDueDate] = useState(task.due_date);
   const [dueTime, setDueTime] = useState(task.due_time ?? '');
   const [status, setStatus] = useState<Task['status']>(task.status);
+  const [priority, setPriority] = useState<Task['priority']>(task.priority ?? 'normal');
+  const [labelIds, setLabelIds] = useState<string[]>(task.labels?.map(l => l.id) ?? []);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -43,6 +47,8 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
         due_date: dueDate,
         due_time: dueTime || null,
         status,
+        priority,
+        label_ids: labelIds,
       });
       onSaved();
     } catch (err) {
@@ -107,6 +113,22 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
                   <option value="cancelled">{t('tasks.statusCancelled')}</option>
                 </select>
               </label>
+              <label className="event-modal-field">
+                <span>{t('tasks.priority')}</span>
+                <select value={priority} onChange={e => setPriority(e.target.value as Task['priority'])}>
+                  <option value="high">{t('tasks.priorityHigh')}</option>
+                  <option value="normal">{t('tasks.priorityNormal')}</option>
+                  <option value="low">{t('tasks.priorityLow')}</option>
+                </select>
+              </label>
+            </div>
+            <div className="event-modal-labels">
+              {task.labels?.map(l => (
+                <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+              ))}
+              <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
+                {t('labels.editLabels')}
+              </button>
             </div>
             {error && <div className="event-modal-error" role="alert">{error}</div>}
           </div>
@@ -122,6 +144,13 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
           </div>
         </div>
       </div>
+
+      <LabelPickerModal
+        open={labelPickerOpen}
+        onClose={() => setLabelPickerOpen(false)}
+        selected={labelIds}
+        onApply={setLabelIds}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

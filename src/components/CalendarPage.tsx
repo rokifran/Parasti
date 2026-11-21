@@ -10,6 +10,7 @@ import { api } from '../api/client';
 import { CalendarEvent } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
+import { LabelPickerModal } from './LabelPickerModal';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightSmallIcon, PlusIcon, XIcon } from './Icons';
 
 type View = 'day' | 'month' | 'year';
@@ -256,6 +257,8 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
   const [date, setDate] = useState(event?.event_date ?? initialDate);
   const [start, setStart] = useState(event?.start_time ?? '');
   const [end, setEnd] = useState(event?.end_time ?? '');
+  const [labelIds, setLabelIds] = useState<string[]>(event?.labels?.map(l => l.id) ?? []);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -275,7 +278,7 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
     setSaving(true);
     setError(null);
     try {
-      const payload = { title: title.trim(), event_date: date, start_time: start || null, end_time: end || null };
+      const payload = { title: title.trim(), event_date: date, start_time: start || null, end_time: end || null, label_ids: labelIds };
       if (isNew) await api.events.create(payload);
       else await api.events.update(event.id, payload);
       onSaved();
@@ -340,6 +343,14 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
               </label>
             </div>
             {!start && <div className="event-modal-hint">{t('calendar.allDay')}</div>}
+            <div className="event-modal-labels">
+              {event?.labels?.map(l => (
+                <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+              ))}
+              <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
+                {t('labels.editLabels')}
+              </button>
+            </div>
             {error && <div className="event-modal-error" role="alert">{error}</div>}
           </div>
 
@@ -356,6 +367,13 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
           </div>
         </div>
       </div>
+
+      <LabelPickerModal
+        open={labelPickerOpen}
+        onClose={() => setLabelPickerOpen(false)}
+        selected={labelIds}
+        onApply={setLabelIds}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

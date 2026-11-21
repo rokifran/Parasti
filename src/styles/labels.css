@@ -1,0 +1,56 @@
+/* Label chips + label view. Tokens only (docs/design-system.md). */
+.label-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px var(--space-2); border-radius: var(--radius-full);
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.label-chip:hover { border-color: var(--accent); color: var(--accent-text); }
+.label-chip--static { cursor: default; }
+.label-chip--add { border-style: dashed; }
+.page-labels-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
+.label-view-section { margin-top: var(--space-5); }
+.label-view-section-title { font-weight: var(--fw-semibold); margin-bottom: var(--space-2); }
+
+/* Picker + the chip row shared by the task and event modals. */
+.event-modal-labels { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.label-picker-list {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  max-height: 220px; overflow-y: auto;
+}
+.label-picker-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--fs-sm); color: var(--text-primary); cursor: pointer;
+}
+.label-picker-item input { accent-color: var(--accent); }
+.label-picker-empty { font-size: var(--fs-sm); color: var(--text-tertiary); }
+.label-picker-create { display: flex; gap: var(--space-2); }
+.label-picker-create input {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  outline: none;
+}
+.label-picker-create input:focus { border-color: var(--accent); }
+.label-picker-create-btn {
+  border: none;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.label-picker-create-btn:disabled { opacity: 0.6; cursor: default; }
+
+.label-view-actions { display: flex; gap: var(--space-2); margin-left: auto; }
+.label-view-rename { align-items: center; }
+
+@media (max-width: 640px) {
+  .tasks-row .label-chip--static { display: none; }
+}

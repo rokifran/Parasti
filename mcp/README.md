@@ -10,6 +10,7 @@ It allows any LLM or AI agent to:
 - Inspect page details and ordered blocks by page ID.
 - Upload local images into a page at a chosen position.
 - Manage your personal tasks: see what is overdue and due today, create tasks with due dates, reschedule, reopen, cancel, complete, or delete them.
+- Browse labels and everything tagged with them across pages, tasks and events.
 
 Beyond pages, this server can also write your calendar, create projects, place images, and manage your tasks: it creates, lists, updates, and deletes events, builds project roots with nested sub-pages, inserts image blocks after a given block or at a given index, and keeps your task list up to date.
 
@@ -57,6 +58,8 @@ sharing one username and password.
 | `complete_task` | `id` *(string, required)* | Marks a task as done. |
 | `update_task` | `id` *(string, required)*<br>`title` *(string, optional)*<br>`due_date` *(string, optional, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled`)*<br>`pageId` *(string, optional)* | Partial update: renames, reschedules, reopens, cancels, or links/unlinks a page. Empty `due_time` clears the time; empty `pageId` unlinks. Only passed fields change. |
 | `delete_task` | `id` *(string, required)* | Permanently deletes a task. Destructive: only call after the user confirms. |
+| `list_labels` | *(none)* | Lists all labels with their IDs. Labels are per-user and can tag pages, tasks and events. |
+| `find_by_label` | `name` *(string, required)* | Finds everything carrying a label, grouped as pages, tasks and events. Matches the exact name (case-insensitive). |
 | `get_config` | *(none)* | Reads the instance configuration: enabled modules (`features`), the institution timezone that decides "today", and whether Google sync is configured. Public — no token needed. |
 | `create_project` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)* | Creates a root page flagged as a project. |
 | `list_projects` | *(none)* | Lists projects (root pages with `is_project`). |
@@ -74,6 +77,8 @@ sharing one username and password.
 - "Buka kembali tugas <id> yang tadi kuselesaikan."
 - "Geser tenggat tugas <id> ke Jumat depan."
 - "Hapus tugas <id>."
+- "What do I have under the label 'diet'?"
+- "List my labels."
 - "Fitur apa saja yang aktif di instansi Parasti-ku?"
 
 The agent reads tasks through `list_tasks`; overdue and today are decided by

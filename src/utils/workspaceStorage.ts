@@ -18,7 +18,12 @@ const STORAGE_KEYS = {
 // Custom events for cross-component reactivity.
 export const STORAGE_EVENTS = {
   RECENTS_CHANGED: 'parasti:recents_changed',
+  LABELS_CHANGED: 'parasti:labels_changed',
 };
+
+export function notifyLabelsChanged() {
+  dispatchChange(STORAGE_EVENTS.LABELS_CHANGED);
+}
 
 function dispatchChange(eventName: string) {
   window.dispatchEvent(new Event(eventName));

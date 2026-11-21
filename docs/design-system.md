@@ -48,6 +48,7 @@ Setelah fork dibuat, salin file ke:
 | `--btn-primary-bg` | `#A34A2C` | Latar tombol utama |
 | `--btn-primary-text` | `#F4EFE6` | Teks tombol utama |
 | `--danger` | `#B23A32` | Error, aksi hapus |
+| `--warning` | `#8A6A1B` | Tenggat hari ini, peringatan non-error |
 
 ### 2.3 Tema gelap
 
@@ -63,6 +64,7 @@ Setelah fork dibuat, salin file ke:
 | `--btn-primary-bg` | `#E08A6C` | Latar tombol utama |
 | `--btn-primary-text` | `#1E1D1A` | Teks tombol utama |
 | `--danger` | `#E8786F` | Error |
+| `--warning` | `#D9A93E` | Tenggat hari ini, peringatan non-error |
 
 Gelap memakai arang hangat (`#1E1D1A`), bukan abu-abu netral. Ini keputusan desain: mode gelap tetap terasa seperti versi malam dari kertas yang sama.
 

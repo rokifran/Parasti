@@ -110,6 +110,7 @@
 
   --danger: #B23A32;
   --danger-soft: rgba(178, 58, 50, 0.1);
+  --warning: #8A6A1B;
 
   --focus-ring: rgba(192, 90, 60, 0.45);
   --selection-bg: rgba(192, 90, 60, 0.22);
@@ -161,6 +162,7 @@
 
   --danger: #E8786F;
   --danger-soft: rgba(232, 120, 111, 0.12);
+  --warning: #D9A93E;
 
   --focus-ring: rgba(224, 138, 108, 0.5);
   --selection-bg: rgba(224, 138, 108, 0.28);

@@ -1,4 +1,4 @@
-import type { Page, PageWithBlocks, Block, BlockProps, FileInfo, SearchResult, TrashedPage, CalendarEvent, Task, AppConfig } from '../types';
+import type { Page, PageWithBlocks, Block, BlockProps, FileInfo, SearchResult, TrashedPage, CalendarEvent, Task, TaskPriority, Label, AppConfig } from '../types';
 
 export class ApiError extends Error {
   status: number;
@@ -214,7 +214,7 @@ export const api = {
       request<{ page: Page }>('/pages', { method: 'POST', body: JSON.stringify(data) }),
     update: (
       id: string,
-      data: Partial<Pick<Page, 'title' | 'icon' | 'parent_id' | 'position' | 'is_favorite' | 'full_width' | 'is_project' | 'cover'>>
+      data: Partial<Pick<Page, 'title' | 'icon' | 'parent_id' | 'position' | 'is_favorite' | 'full_width' | 'is_project' | 'cover'>> & { label_ids?: string[] }
     ) =>
       request<{ page: Page }>(`/pages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     // Moves the page (and its subpages) to Trash; nothing is lost yet.
@@ -259,9 +259,9 @@ export const api = {
   events: {
     list: (from: string, to: string) =>
       request<{ events: CalendarEvent[] }>(`/events?from=${from}&to=${to}`),
-    create: (data: { title: string; event_date: string; start_time?: string | null; end_time?: string | null }) =>
+    create: (data: { title: string; event_date: string; start_time?: string | null; end_time?: string | null; label_ids?: string[] }) =>
       request<{ event: CalendarEvent }>('/events', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: { title: string; event_date: string; start_time?: string | null; end_time?: string | null }) =>
+    update: (id: string, data: { title: string; event_date: string; start_time?: string | null; end_time?: string | null; label_ids?: string[] }) =>
       request<{ event: CalendarEvent }>(`/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id: string) => request<{ success: boolean }>(`/events/${id}`, { method: 'DELETE' }),
   },
@@ -277,13 +277,24 @@ export const api = {
       const query = qs.toString();
       return request<{ tasks: Task[]; today: string; timezone: string }>(`/tasks${query ? `?${query}` : ''}`);
     },
-    create: (data: { title: string; due_date: string; due_time?: string | null; page_id?: string | null }) =>
+    create: (data: { title: string; due_date: string; due_time?: string | null; page_id?: string | null; priority?: TaskPriority; label_ids?: string[] }) =>
       request<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
     update: (
       id: string,
-      data: Partial<Pick<Task, 'title' | 'due_date' | 'due_time' | 'status' | 'page_id'>>
+      data: Partial<Pick<Task, 'title' | 'due_date' | 'due_time' | 'status' | 'priority' | 'page_id'>> & { label_ids?: string[] }
     ) => request<{ task: Task }>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) => request<{ success: boolean }>(`/tasks/${id}`, { method: 'DELETE' }),
+  },
+  labels: {
+    list: () => request<{ labels: Label[] }>('/labels'),
+    create: (name: string) =>
+      request<{ label: Label }>('/labels', { method: 'POST', body: JSON.stringify({ name }) }),
+    rename: (id: string, name: string) =>
+      request<{ label: Label }>(`/labels/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    remove: (id: string) =>
+      request<{ success: boolean }>(`/labels/${id}`, { method: 'DELETE' }),
+    items: (id: string) =>
+      request<{ label: Label; pages: Array<{ id: string; title: string; icon: string }>; tasks: Task[]; events: CalendarEvent[] }>(`/labels/${id}/items`),
   },
   workspace: {
     get: () => request<{ name: string; icon: string }>('/workspace'),

@@ -60,6 +60,7 @@ export function SearchModal({ open, onClose }: Props) {
   }, [query, open]);
 
   const handleSelect = useCallback((item: SearchResult) => {
+    if (item.match_type === 'label') { onClose(); navigate(`/labels/${item.id}`); return; }
     onClose();
     navigate(`/page/${item.page_id}`);
   }, [navigate, onClose]);
@@ -161,7 +162,7 @@ export function SearchModal({ open, onClose }: Props) {
                     <div className="search-result-header">
                       <span className="search-result-title">{res.title}</span>
                       <span className="search-result-badge">
-                        {res.match_type === 'page' ? t('search.badgePage') : (res.block_type || t('search.badgeBlock'))}
+                        {res.match_type === 'label' ? t('search.badgeLabel') : res.match_type === 'page' ? t('search.badgePage') : (res.block_type || t('search.badgeBlock'))}
                       </span>
                     </div>
                     {res.match_type === 'block' && res.snippet && (

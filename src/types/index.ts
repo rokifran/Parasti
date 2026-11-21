@@ -15,8 +15,12 @@ export interface Page {
   cover: string | null;
   // Set while the page is in Trash (ISO-like UTC timestamp), otherwise null.
   deleted_at: string | null;
+  // Only the page detail (GET /pages/:id) and PUT response carry labels.
+  labels?: Label[];
   children?: Page[];
 }
+
+export interface Label { id: string; name: string; }
 
 // A row of the Trash list (GET /pages/trash): only trashed pages whose parent
 // is not trashed, so a restore brings the whole subtree back.
@@ -130,11 +134,13 @@ export interface CalendarEvent {
   event_date: string;
   start_time: string | null;
   end_time: string | null;
+  labels: Label[];
   created_at: string;
   updated_at: string;
 }
 
 export type TaskBucket = 'overdue' | 'today' | 'upcoming' | 'done' | 'cancelled';
+export type TaskPriority = 'high' | 'normal' | 'low';
 
 // A task belongs to its creator; there is no assignee and no sharing.
 export interface Task {
@@ -143,6 +149,8 @@ export interface Task {
   due_date: string;
   due_time: string | null;
   status: 'open' | 'done' | 'cancelled';
+  priority: TaskPriority;
+  labels: Label[];
   page_id: string | null;
   completed_at: string | null;
   bucket: TaskBucket;
@@ -219,10 +227,10 @@ export const BLOCK_TYPES: BlockTypeOption[] = [
 
 export interface SearchResult {
   id: string;
-  page_id: string;
+  page_id?: string;
   title: string;
   icon: string;
-  match_type: 'page' | 'block';
+  match_type: 'page' | 'block' | 'label';
   block_type?: BlockType;
   snippet?: string;
   updated_at: string;

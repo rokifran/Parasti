@@ -4,6 +4,7 @@ import { parseMarkdownToBlocks, blocksToMarkdown } from '../../server/shared/mar
 import { parseBlockProps, serializeBlockProps } from '../../server/shared/blockProps';
 import { validateEventInput, validateEventRange } from '../../server/shared/events';
 import { parseFeatures } from '../../server/shared/features';
+import { validateLabelName, extractLabelIds } from '../../server/shared/labels';
 import {
   validateTaskInput,
   todayIn,
@@ -305,6 +306,43 @@ async function ensureSchema(db: D1Database) {
         FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE SET NULL
       );
       CREATE INDEX IF NOT EXISTS idx_tasks_owner_due ON tasks(owner_user_id, due_date);
+
+      CREATE TABLE IF NOT EXISTS labels (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(owner_user_id, name),
+        FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_labels_owner ON labels(owner_user_id);
+
+      CREATE TABLE IF NOT EXISTS page_labels (
+        page_id TEXT NOT NULL,
+        label_id TEXT NOT NULL,
+        PRIMARY KEY (page_id, label_id),
+        FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
+        FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_page_labels_label ON page_labels(label_id);
+
+      CREATE TABLE IF NOT EXISTS task_labels (
+        task_id TEXT NOT NULL,
+        label_id TEXT NOT NULL,
+        PRIMARY KEY (task_id, label_id),
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_labels_label ON task_labels(label_id);
+
+      CREATE TABLE IF NOT EXISTS event_labels (
+        event_id TEXT NOT NULL,
+        label_id TEXT NOT NULL,
+        PRIMARY KEY (event_id, label_id),
+        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_event_labels_label ON event_labels(label_id);
     `
         .split(';')
         .map((s) => s.trim())
@@ -611,6 +649,8 @@ app.use('/events', authMiddleware);
 app.use('/events/*', authMiddleware);
 app.use('/tasks', authMiddleware);
 app.use('/tasks/*', authMiddleware);
+app.use('/labels', authMiddleware);
+app.use('/labels/*', authMiddleware);
 
 app.post('/auth/token', async (c) => {
   const env = requireEnv(c);
@@ -1213,7 +1253,13 @@ app.get('/pages/:id', async (c) => {
     'SELECT * FROM blocks WHERE page_id = ? ORDER BY position ASC'
   ).bind(id).all();
 
-  return c.json({ page: { ...normalizePage(page), blocks: blocks.map(normalizeBlock) } });
+  const { results: labels } = await c.env.DB.prepare(
+    `SELECT l.id, l.name FROM page_labels pl
+       JOIN labels l ON l.id = pl.label_id
+       WHERE pl.page_id = ? AND l.owner_user_id = ?`
+  ).bind(id, user.id).all();
+
+  return c.json({ page: { ...normalizePage(page), blocks: blocks.map(normalizeBlock), labels: labels || [] } });
 });
 
 // 3.5 GET /api/pages/:id/export
@@ -1240,6 +1286,13 @@ app.put('/pages/:id', async (c) => {
   // Pages in Trash are read-only until restored.
   const existing: any = await c.env.DB.prepare('SELECT deleted_at FROM pages WHERE id = ?').bind(id).first();
   if (!existing || !(await pageOwnedBy(c.env.DB, id, user.id)) || existing.deleted_at) return c.json({ error: 'Not found' }, 404);
+
+  const lv = extractLabelIds((body || {}) as Record<string, unknown>);
+  if ('error' in lv) return c.json({ error: lv.error }, 400);
+  const labelIds = lv.value;
+  if (labelIds !== undefined && !(await labelsOwnedBy(c.env.DB, labelIds, user.id))) {
+    return c.json({ error: 'Label not found' }, 400);
+  }
 
   const updates: string[] = [];
   const params: any[] = [];
@@ -1268,7 +1321,13 @@ app.put('/pages/:id', async (c) => {
   }
 
   const page = await c.env.DB.prepare('SELECT * FROM pages WHERE id = ?').bind(id).first();
-  return c.json({ page: normalizePage(page) });
+  if (labelIds !== undefined) await replacePageLabels(c.env.DB, id, labelIds);
+  const { results: labels } = await c.env.DB.prepare(
+    `SELECT l.id, l.name FROM page_labels pl
+       JOIN labels l ON l.id = pl.label_id
+       WHERE pl.page_id = ? AND l.owner_user_id = ?`
+  ).bind(id, user.id).all();
+  return c.json({ page: { ...normalizePage(page), labels: labels || [] } });
 });
 
 // 5. DELETE /api/pages/:id — moves the page and all its descendants to Trash
@@ -1553,7 +1612,25 @@ app.get('/search', async (c) => {
      ORDER BY b.updated_at DESC LIMIT 25`
   ).bind(pattern, user.id).all();
 
+  const { results: matchedLabels } = await c.env.DB.prepare(
+    `SELECT id, name FROM labels
+     WHERE owner_user_id = ? AND name LIKE ?
+     ORDER BY name COLLATE NOCASE ASC LIMIT 5`
+  ).bind(user.id, pattern).all();
+
   const results: any[] = [];
+
+  for (const l of (matchedLabels as any[])) {
+    results.push({
+      id: l.id,
+      page_id: '',
+      title: l.name,
+      icon: '🏷️',
+      match_type: 'label',
+      snippet: '',
+      updated_at: '',
+    });
+  }
 
   for (const p of (matchedPages as any[])) {
     results.push({
@@ -1598,20 +1675,30 @@ app.get('/events', async (c) => {
       ).bind(user.id, range.value.from, range.value.to)
     : c.env.DB.prepare(`SELECT * FROM events WHERE owner_user_id = ? ${order}`).bind(user.id);
   const { results } = await stmt.all();
-  return c.json({ events: results || [] });
+  const rows = (results || []) as any[];
+  const labelsByEvent = await eventLabelsMap(c.env.DB, rows.map((row) => row.id));
+  return c.json({ events: rows.map((row) => ({ ...row, labels: labelsByEvent.get(row.id) ?? [] })) });
 });
 
 app.post('/events', async (c) => {
   const body = await c.req.json().catch(() => null);
   const v = validateEventInput(body);
   if ('error' in v) return c.json({ error: v.error }, 400);
+  const lv = extractLabelIds((body || {}) as Record<string, unknown>);
+  if ('error' in lv) return c.json({ error: lv.error }, 400);
+  const labelIds = lv.value;
   const id = crypto.randomUUID();
   const user = c.get('user');
+  if (labelIds !== undefined && !(await labelsOwnedBy(c.env.DB, labelIds, user.id))) {
+    return c.json({ error: 'Label not found' }, 400);
+  }
   await c.env.DB.prepare(
     'INSERT INTO events (id, title, event_date, start_time, end_time, owner_user_id) VALUES (?, ?, ?, ?, ?, ?)'
   ).bind(id, v.value.title, v.value.event_date, v.value.start_time, v.value.end_time, user.id).run();
-  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first();
-  return c.json({ event });
+  if (labelIds !== undefined) await replaceEventLabels(c.env.DB, id, labelIds);
+  const event: any = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first();
+  const labels = (await eventLabelsMap(c.env.DB, [id])).get(id) ?? [];
+  return c.json({ event: { ...event, labels } });
 });
 
 app.put('/events/:id', async (c) => {
@@ -1622,11 +1709,19 @@ app.put('/events/:id', async (c) => {
   const body = await c.req.json().catch(() => null);
   const v = validateEventInput(body);
   if ('error' in v) return c.json({ error: v.error }, 400);
+  const lv = extractLabelIds((body || {}) as Record<string, unknown>);
+  if ('error' in lv) return c.json({ error: lv.error }, 400);
+  const labelIds = lv.value;
+  if (labelIds !== undefined && !(await labelsOwnedBy(c.env.DB, labelIds, user.id))) {
+    return c.json({ error: 'Label not found' }, 400);
+  }
   await c.env.DB.prepare(
     `UPDATE events SET title = ?, event_date = ?, start_time = ?, end_time = ?, updated_at = datetime('now') WHERE id = ?`
   ).bind(v.value.title, v.value.event_date, v.value.start_time, v.value.end_time, id).run();
-  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first();
-  return c.json({ event });
+  if (labelIds !== undefined) await replaceEventLabels(c.env.DB, id, labelIds);
+  const event: any = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first();
+  const labels = (await eventLabelsMap(c.env.DB, [id])).get(id) ?? [];
+  return c.json({ event: { ...event, labels } });
 });
 
 app.delete('/events/:id', async (c) => {
@@ -1644,7 +1739,7 @@ app.delete('/events/:id', async (c) => {
 
 const TASK_DUE_FILTERS = ['overdue', 'today', 'upcoming', 'actionable', 'all'];
 const TASK_STATUS_FILTERS = [...TASK_STATUSES, 'all'];
-const TASK_SELECT = 'SELECT id, title, due_date, due_time, status, page_id, completed_at FROM tasks';
+const TASK_SELECT = 'SELECT id, title, due_date, due_time, status, priority, page_id, completed_at FROM tasks';
 
 function toTask(row: any, today: string) {
   return {
@@ -1653,6 +1748,7 @@ function toTask(row: any, today: string) {
     due_date: row.due_date,
     due_time: row.due_time ?? null,
     status: row.status,
+    priority: row.priority ?? 'normal',
     page_id: row.page_id ?? null,
     completed_at: row.completed_at ?? null,
     bucket: taskBucket(row, today),
@@ -1711,13 +1807,18 @@ app.get('/tasks', async (c) => {
   const { results } = await c.env.DB
     .prepare(
       `${TASK_SELECT} WHERE ${wheres.join(' AND ')}
-       ORDER BY due_date ASC, (due_time IS NULL) DESC, due_time ASC, id ASC`
+       ORDER BY due_date ASC,
+         CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END ASC,
+         (due_time IS NULL) DESC, due_time ASC, id ASC`
     )
     .bind(...params)
     .all();
 
+  const rows = (results || []) as any[];
+  const labelsByTask = await taskLabelsMap(c.env.DB, rows.map((row) => row.id));
+
   return c.json({
-    tasks: (results || []).map((row: any) => toTask(row, today)),
+    tasks: rows.map((row) => ({ ...toTask(row, today), labels: labelsByTask.get(row.id) ?? [] })),
     today,
     timezone,
   });
@@ -1729,8 +1830,14 @@ app.post('/tasks', async (c) => {
   const body = await c.req.json().catch(() => null);
   const v = validateTaskInput(body, false);
   if ('error' in v) return c.json({ error: v.error }, 400);
+  const lv = extractLabelIds((body || {}) as Record<string, unknown>);
+  if ('error' in lv) return c.json({ error: lv.error }, 400);
+  const labelIds = lv.value;
 
   const user = c.get('user');
+  if (labelIds !== undefined && !(await labelsOwnedBy(c.env.DB, labelIds, user.id))) {
+    return c.json({ error: 'Label not found' }, 400);
+  }
   const pageId = v.value.page_id ?? null;
   if (pageId && !(await pageOwnedBy(c.env.DB, pageId, user.id))) {
     return c.json({ error: 'Page not found' }, 400);
@@ -1738,12 +1845,15 @@ app.post('/tasks', async (c) => {
 
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO tasks (id, owner_user_id, title, due_date, due_time, status, page_id)
-     VALUES (?, ?, ?, ?, ?, 'open', ?)`
-  ).bind(id, user.id, v.value.title, v.value.due_date, v.value.due_time ?? null, pageId).run();
+    `INSERT INTO tasks (id, owner_user_id, title, due_date, due_time, status, priority, page_id)
+     VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`
+  ).bind(id, user.id, v.value.title, v.value.due_date, v.value.due_time ?? null, v.value.priority ?? 'normal', pageId).run();
+
+  if (labelIds !== undefined) await replaceTaskLabels(c.env.DB, id, labelIds);
 
   const row = await c.env.DB.prepare(`${TASK_SELECT} WHERE id = ?`).bind(id).first();
-  return c.json({ task: toTask(row, todayIn(timezoneOf(c))) });
+  const labels = (await taskLabelsMap(c.env.DB, [id])).get(id) ?? [];
+  return c.json({ task: { ...toTask(row, todayIn(timezoneOf(c))), labels } });
 });
 
 app.patch('/tasks/:id', async (c) => {
@@ -1760,6 +1870,13 @@ app.patch('/tasks/:id', async (c) => {
   const body = await c.req.json().catch(() => null);
   const v = validateTaskInput(body, true);
   if ('error' in v) return c.json({ error: v.error }, 400);
+  const lv = extractLabelIds((body || {}) as Record<string, unknown>);
+  if ('error' in lv) return c.json({ error: lv.error }, 400);
+  const labelIds = lv.value;
+
+  if (labelIds !== undefined && !(await labelsOwnedBy(c.env.DB, labelIds, user.id))) {
+    return c.json({ error: 'Label not found' }, 400);
+  }
 
   if (v.value.page_id && !(await pageOwnedBy(c.env.DB, v.value.page_id, user.id))) {
     return c.json({ error: 'Page not found' }, 400);
@@ -1788,6 +1905,10 @@ app.patch('/tasks/:id', async (c) => {
       sets.push('completed_at = NULL');
     }
   }
+  if (v.value.priority !== undefined) {
+    sets.push('priority = ?');
+    params.push(v.value.priority);
+  }
   if (v.value.page_id !== undefined) {
     sets.push('page_id = ?');
     params.push(v.value.page_id);
@@ -1796,8 +1917,10 @@ app.patch('/tasks/:id', async (c) => {
   params.push(id);
 
   await c.env.DB.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+  if (labelIds !== undefined) await replaceTaskLabels(c.env.DB, id, labelIds);
   const row = await c.env.DB.prepare(`${TASK_SELECT} WHERE id = ?`).bind(id).first();
-  return c.json({ task: toTask(row, todayIn(timezoneOf(c))) });
+  const labels = (await taskLabelsMap(c.env.DB, [id])).get(id) ?? [];
+  return c.json({ task: { ...toTask(row, todayIn(timezoneOf(c))), labels } });
 });
 
 app.delete('/tasks/:id', async (c) => {
@@ -1813,6 +1936,178 @@ app.delete('/tasks/:id', async (c) => {
 
   await c.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run();
   return c.json({ success: true });
+});
+
+// 9b.7 Labels (auth-gated; labels are per-user, plan-06 LB1) -----------------
+// Same contract as the Express backend (server/index.ts).
+
+async function labelsOwnedBy(db: D1Database, ids: string[], userId: string): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const placeholders = ids.map(() => '?').join(',');
+  const row: any = await db
+    .prepare(`SELECT COUNT(*) AS n FROM labels WHERE id IN (${placeholders}) AND owner_user_id = ?`)
+    .bind(...ids, userId)
+    .first();
+  return (row?.n ?? 0) === ids.length;
+}
+
+async function taskLabelsMap(db: D1Database, taskIds: string[]): Promise<Map<string, { id: string; name: string }[]>> {
+  const map = new Map<string, { id: string; name: string }[]>();
+  if (taskIds.length === 0) return map;
+  const rows = await selectIn(
+    db,
+    'SELECT tl.task_id AS item_id, l.id, l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id IN',
+    taskIds
+  );
+  for (const row of rows) {
+    const list = map.get(row.item_id) ?? [];
+    list.push({ id: row.id, name: row.name });
+    map.set(row.item_id, list);
+  }
+  return map;
+}
+
+async function eventLabelsMap(db: D1Database, eventIds: string[]): Promise<Map<string, { id: string; name: string }[]>> {
+  const map = new Map<string, { id: string; name: string }[]>();
+  if (eventIds.length === 0) return map;
+  const rows = await selectIn(
+    db,
+    'SELECT el.event_id AS item_id, l.id, l.name FROM event_labels el JOIN labels l ON l.id = el.label_id WHERE el.event_id IN',
+    eventIds
+  );
+  for (const row of rows) {
+    const list = map.get(row.item_id) ?? [];
+    list.push({ id: row.id, name: row.name });
+    map.set(row.item_id, list);
+  }
+  return map;
+}
+
+async function replaceTaskLabels(db: D1Database, taskId: string, labelIds: string[]): Promise<void> {
+  const stmts = [db.prepare('DELETE FROM task_labels WHERE task_id = ?').bind(taskId)];
+  for (const labelId of labelIds) {
+    stmts.push(db.prepare('INSERT INTO task_labels (task_id, label_id) VALUES (?, ?)').bind(taskId, labelId));
+  }
+  await db.batch(stmts);
+}
+
+async function replaceEventLabels(db: D1Database, eventId: string, labelIds: string[]): Promise<void> {
+  const stmts = [db.prepare('DELETE FROM event_labels WHERE event_id = ?').bind(eventId)];
+  for (const labelId of labelIds) {
+    stmts.push(db.prepare('INSERT INTO event_labels (event_id, label_id) VALUES (?, ?)').bind(eventId, labelId));
+  }
+  await db.batch(stmts);
+}
+
+async function replacePageLabels(db: D1Database, pageId: string, labelIds: string[]): Promise<void> {
+  const stmts = [db.prepare('DELETE FROM page_labels WHERE page_id = ?').bind(pageId)];
+  for (const labelId of labelIds) {
+    stmts.push(db.prepare('INSERT INTO page_labels (page_id, label_id) VALUES (?, ?)').bind(pageId, labelId));
+  }
+  await db.batch(stmts);
+}
+
+app.get('/labels', async (c) => {
+  const user = c.get('user');
+  const { results } = await c.env.DB.prepare(
+    'SELECT id, name FROM labels WHERE owner_user_id = ? ORDER BY name COLLATE NOCASE ASC'
+  ).bind(user.id).all();
+  return c.json({ labels: results || [] });
+});
+
+app.post('/labels', async (c) => {
+  const body = (await c.req.json().catch(() => null)) || {};
+  const v = validateLabelName(body.name);
+  if ('error' in v) return c.json({ error: v.error }, 400);
+
+  const user = c.get('user');
+  const duplicate = await c.env.DB.prepare(
+    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE'
+  ).bind(user.id, v.value).first();
+  if (duplicate) return c.json({ error: 'Label already exists' }, 409);
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    'INSERT INTO labels (id, owner_user_id, name) VALUES (?, ?, ?)'
+  ).bind(id, user.id, v.value).run();
+  return c.json({ label: { id, name: v.value } });
+});
+
+app.patch('/labels/:id', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const existing = await c.env.DB.prepare(
+    'SELECT id FROM labels WHERE id = ? AND owner_user_id = ?'
+  ).bind(id, user.id).first();
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  const body = (await c.req.json().catch(() => null)) || {};
+  const v = validateLabelName(body.name);
+  if ('error' in v) return c.json({ error: v.error }, 400);
+
+  const duplicate = await c.env.DB.prepare(
+    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE'
+  ).bind(user.id, v.value).first();
+  if (duplicate) return c.json({ error: 'Label already exists' }, 409);
+
+  await c.env.DB.prepare('UPDATE labels SET name = ? WHERE id = ?').bind(v.value, id).run();
+  return c.json({ label: { id, name: v.value } });
+});
+
+app.delete('/labels/:id', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const { meta } = await c.env.DB.prepare(
+    'DELETE FROM labels WHERE id = ? AND owner_user_id = ?'
+  ).bind(id, user.id).run();
+  if ((meta?.changes ?? 0) === 0) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
+});
+
+app.get('/labels/:id/items', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const label: any = await c.env.DB.prepare(
+    'SELECT id, name FROM labels WHERE id = ? AND owner_user_id = ?'
+  ).bind(id, user.id).first();
+  if (!label) return c.json({ error: 'Not found' }, 404);
+
+  const today = todayIn(timezoneOf(c));
+
+  const { results: pages } = await c.env.DB.prepare(
+    `SELECT p.id, p.title, p.icon FROM page_labels pl
+       JOIN pages p ON p.id = pl.page_id
+       WHERE pl.label_id = ? AND p.owner_user_id = ? AND p.deleted_at IS NULL
+       ORDER BY p.title COLLATE NOCASE ASC`
+  ).bind(id, user.id).all();
+
+  const { results: taskRows } = await c.env.DB.prepare(
+    `SELECT t.id, t.title, t.due_date, t.due_time, t.status, t.priority, t.page_id, t.completed_at
+       FROM task_labels tl JOIN tasks t ON t.id = tl.task_id
+       WHERE tl.label_id = ? AND t.owner_user_id = ?
+       ORDER BY t.due_date ASC,
+         CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END ASC,
+         (t.due_time IS NULL) DESC, t.due_time ASC, t.id ASC`
+  ).bind(id, user.id).all();
+
+  const { results: eventRows } = await c.env.DB.prepare(
+    `SELECT e.id, e.title, e.event_date, e.start_time, e.end_time, e.created_at, e.updated_at
+       FROM event_labels el JOIN events e ON e.id = el.event_id
+       WHERE el.label_id = ? AND e.owner_user_id = ?
+       ORDER BY e.event_date ASC, (e.start_time IS NULL) DESC, e.start_time ASC, e.id ASC`
+  ).bind(id, user.id).all();
+
+  const tasks = (taskRows || []) as any[];
+  const events = (eventRows || []) as any[];
+  const labelsByTask = await taskLabelsMap(c.env.DB, tasks.map((row) => row.id));
+  const labelsByEvent = await eventLabelsMap(c.env.DB, events.map((row) => row.id));
+
+  return c.json({
+    label,
+    pages: pages || [],
+    tasks: tasks.map((row) => ({ ...toTask(row, today), labels: labelsByTask.get(row.id) ?? [] })),
+    events: events.map((row) => ({ ...row, labels: labelsByEvent.get(row.id) ?? [] })),
+  });
 });
 
 // 10. POST /api/files/upload — R2 is the only binary backend. There is no D1

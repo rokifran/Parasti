@@ -6,11 +6,16 @@ export const TASK_STATUSES = ['open', 'done', 'cancelled'] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+export const TASK_PRIORITIES = ['high', 'normal', 'low'] as const;
+
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
 export interface TaskInput {
   title?: string;
   due_date?: string;
   due_time?: string | null;
   status?: TaskStatus;
+  priority?: TaskPriority;
   page_id?: string | null;
 }
 
@@ -91,6 +96,16 @@ export function validateTaskInput(body: unknown, partial: boolean): TaskValidati
       return { error: 'Invalid status' };
     }
     value.status = b.status as TaskStatus;
+  }
+
+  if (b.priority !== undefined) {
+    if (
+      typeof b.priority !== 'string' ||
+      !(TASK_PRIORITIES as readonly string[]).includes(b.priority)
+    ) {
+      return { error: 'Invalid priority' };
+    }
+    value.priority = b.priority as TaskPriority;
   }
 
   if (!partial || b.page_id !== undefined) {

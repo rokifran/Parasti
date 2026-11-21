@@ -94,6 +94,7 @@ const EXPECTED_COLUMNS: { table: string; column: string; ddl: string }[] = [
   { table: 'events', column: 'owner_user_id', ddl: 'owner_user_id TEXT' },
   { table: 'files', column: 'owner_user_id', ddl: 'owner_user_id TEXT' },
   { table: 'api_tokens', column: 'user_id', ddl: 'user_id TEXT' },
+  { table: 'tasks', column: 'priority', ddl: "priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('high', 'normal', 'low'))" },
 ];
 
 function healSchema(): void {
@@ -113,6 +114,43 @@ function healSchema(): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)');
   // Task index from 0010.
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_owner_due ON tasks(owner_user_id, due_date)');
+  // Label indexes from 0012.
+  // healSchema runs after a migration file may have been skipped on a
+  // duplicate-column error, so the tables are re-created first: otherwise the
+  // indexes below would fail on a DB where 0012 stopped at the ALTER TABLE.
+  db.exec(`CREATE TABLE IF NOT EXISTS labels (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(owner_user_id, name),
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS page_labels (
+    page_id TEXT NOT NULL,
+    label_id TEXT NOT NULL,
+    PRIMARY KEY (page_id, label_id),
+    FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
+    FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS task_labels (
+    task_id TEXT NOT NULL,
+    label_id TEXT NOT NULL,
+    PRIMARY KEY (task_id, label_id),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS event_labels (
+    event_id TEXT NOT NULL,
+    label_id TEXT NOT NULL,
+    PRIMARY KEY (event_id, label_id),
+    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+    FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_labels_owner ON labels(owner_user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_page_labels_label ON page_labels(label_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_task_labels_label ON task_labels(label_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_event_labels_label ON event_labels(label_id)');
 }
 
 // Helper: converts the 0/1 flags SQLite stores on a page into booleans, so the

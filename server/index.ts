@@ -30,6 +30,7 @@ import { parseMarkdownToBlocks, blocksToMarkdown } from './shared/markdown';
 import { serializeBlockProps } from './shared/blockProps';
 import { validateEventInput, validateEventRange } from './shared/events';
 import { parseFeatures } from './shared/features';
+import { validateLabelName, extractLabelIds } from './shared/labels';
 import {
   validateTaskInput,
   todayIn,
@@ -523,6 +524,7 @@ app.use('/api/workspace', requireAuth);
 app.use('/api/link-preview', requireAuth);
 app.use('/api/events', requireAuth);
 app.use('/api/tasks', requireAuth);
+app.use('/api/labels', requireAuth);
 
 // GET /api/workspace — returns the singleton with the current name and icon.
 app.get('/api/workspace', (_req, res) => {
@@ -870,7 +872,12 @@ app.get('/api/pages/:id', (req, res) => {
   const blocks = db.prepare(
     'SELECT * FROM blocks WHERE page_id = ? ORDER BY position ASC'
   ).all(id).map(b => normalizeBlock(b as Row));
-  res.json({ page: { ...normalizePage(page), blocks } });
+  const labels = db.prepare(
+    `SELECT l.id, l.name FROM page_labels pl
+       JOIN labels l ON l.id = pl.label_id
+       WHERE pl.page_id = ? AND l.owner_user_id = ?`
+  ).all(id, user.id);
+  res.json({ page: { ...normalizePage(page), blocks, labels } });
 });
 
 // 3.5 GET /api/pages/:id/export
@@ -895,6 +902,13 @@ app.put('/api/pages/:id', (req, res) => {
   // Pages in Trash are read-only until restored.
   const existing: any = db.prepare('SELECT deleted_at FROM pages WHERE id = ?').get(id);
   if (!existing || !pageOwnedBy(id, user.id) || existing.deleted_at) return res.status(404).json({ error: 'Not found' });
+
+  const lv = extractLabelIds(body as Record<string, unknown>);
+  if ('error' in lv) return res.status(400).json({ error: lv.error });
+  const labelIds = lv.value;
+  if (labelIds !== undefined && !labelsOwnedBy(labelIds, user.id)) {
+    return res.status(400).json({ error: 'Label not found' });
+  }
   const updates: string[] = [];
   const params: any[] = [];
   if (typeof body.title === 'string') { updates.push('title = ?'); params.push(body.title.slice(0, 500)); }
@@ -918,7 +932,13 @@ app.put('/api/pages/:id', (req, res) => {
     db.prepare(`UPDATE pages SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   }
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(id);
-  res.json({ page: normalizePage(page as Row) });
+  if (labelIds !== undefined) replacePageLabels(id, labelIds);
+  const labels = db.prepare(
+    `SELECT l.id, l.name FROM page_labels pl
+       JOIN labels l ON l.id = pl.label_id
+       WHERE pl.page_id = ? AND l.owner_user_id = ?`
+  ).all(id, user.id);
+  res.json({ page: { ...normalizePage(page as Row), labels } });
 });
 
 // 5. DELETE /api/pages/:id — moves the page and all its descendants to Trash
@@ -1139,7 +1159,25 @@ app.get('/api/search', requireAuth, (req, res) => {
      ORDER BY b.updated_at DESC LIMIT 25`
   ).all(pattern, user.id);
 
+  const matchedLabels: any[] = db.prepare(
+    `SELECT id, name FROM labels
+     WHERE owner_user_id = ? AND name LIKE ?
+     ORDER BY name COLLATE NOCASE ASC LIMIT 5`
+  ).all(user.id, pattern);
+
   const results: any[] = [];
+
+  for (const l of matchedLabels) {
+    results.push({
+      id: l.id,
+      page_id: '',
+      title: l.name,
+      icon: '🏷️',
+      match_type: 'label',
+      snippet: '',
+      updated_at: '',
+    });
+  }
 
   for (const p of matchedPages) {
     results.push({
@@ -1185,19 +1223,28 @@ app.get('/api/events', (req, res) => {
   const rows = range.value
     ? db.prepare(sql).all(user.id, range.value.from, range.value.to)
     : db.prepare(sql).all(user.id);
-  res.json({ events: rows });
+  const labelsByEvent = eventLabelsMap((rows as any[]).map(row => row.id));
+  res.json({ events: (rows as any[]).map(row => ({ ...row, labels: labelsByEvent.get(row.id) ?? [] })) });
 });
 
 app.post('/api/events', (req, res) => {
   const v = validateEventInput(req.body);
   if ('error' in v) return res.status(400).json({ error: v.error });
+  const lv = extractLabelIds((req.body || {}) as Record<string, unknown>);
+  if ('error' in lv) return res.status(400).json({ error: lv.error });
+  const labelIds = lv.value;
   const id = crypto.randomUUID();
   const user = res.locals.user;
+  if (labelIds !== undefined && !labelsOwnedBy(labelIds, user.id)) {
+    return res.status(400).json({ error: 'Label not found' });
+  }
   db.prepare(
     'INSERT INTO events (id, title, event_date, start_time, end_time, owner_user_id) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(id, v.value.title, v.value.event_date, v.value.start_time, v.value.end_time, user.id);
-  const event = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
-  res.json({ event });
+  if (labelIds !== undefined) replaceEventLabels(id, labelIds);
+  const event: any = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  const labels = eventLabelsMap([id]).get(id) ?? [];
+  res.json({ event: { ...event, labels } });
 });
 
 app.put('/api/events/:id', (req, res) => {
@@ -1207,11 +1254,19 @@ app.put('/api/events/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const v = validateEventInput(req.body);
   if ('error' in v) return res.status(400).json({ error: v.error });
+  const lv = extractLabelIds((req.body || {}) as Record<string, unknown>);
+  if ('error' in lv) return res.status(400).json({ error: lv.error });
+  const labelIds = lv.value;
+  if (labelIds !== undefined && !labelsOwnedBy(labelIds, user.id)) {
+    return res.status(400).json({ error: 'Label not found' });
+  }
   db.prepare(
     `UPDATE events SET title = ?, event_date = ?, start_time = ?, end_time = ?, updated_at = datetime('now') WHERE id = ?`
   ).run(v.value.title, v.value.event_date, v.value.start_time, v.value.end_time, id);
-  const event = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
-  res.json({ event });
+  if (labelIds !== undefined) replaceEventLabels(id, labelIds);
+  const event: any = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  const labels = eventLabelsMap([id]).get(id) ?? [];
+  res.json({ event: { ...event, labels } });
 });
 
 app.delete('/api/events/:id', (req, res) => {
@@ -1229,7 +1284,7 @@ app.delete('/api/events/:id', (req, res) => {
 
 const TASK_DUE_FILTERS = ['overdue', 'today', 'upcoming', 'actionable', 'all'];
 const TASK_STATUS_FILTERS = [...TASK_STATUSES, 'all'];
-const TASK_SELECT = 'SELECT id, title, due_date, due_time, status, page_id, completed_at FROM tasks';
+const TASK_SELECT = 'SELECT id, title, due_date, due_time, status, priority, page_id, completed_at FROM tasks';
 
 function toTask(row: any, today: string) {
   return {
@@ -1238,6 +1293,7 @@ function toTask(row: any, today: string) {
     due_date: row.due_date,
     due_time: row.due_time ?? null,
     status: row.status,
+    priority: row.priority ?? 'normal',
     page_id: row.page_id ?? null,
     completed_at: row.completed_at ?? null,
     bucket: taskBucket(row, today),
@@ -1296,11 +1352,18 @@ app.get('/api/tasks', (req, res) => {
   const rows: any[] = db
     .prepare(
       `${TASK_SELECT} WHERE ${wheres.join(' AND ')}
-       ORDER BY due_date ASC, (due_time IS NULL) DESC, due_time ASC, id ASC`
+       ORDER BY due_date ASC,
+         CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END ASC,
+         (due_time IS NULL) DESC, due_time ASC, id ASC`
     )
     .all(...params);
 
-  res.json({ tasks: rows.map(row => toTask(row, today)), today, timezone });
+  const labelsByTask = taskLabelsMap(rows.map(row => row.id));
+  res.json({
+    tasks: rows.map(row => ({ ...toTask(row, today), labels: labelsByTask.get(row.id) ?? [] })),
+    today,
+    timezone,
+  });
 });
 
 app.post('/api/tasks', (req, res) => {
@@ -1308,8 +1371,14 @@ app.post('/api/tasks', (req, res) => {
 
   const v = validateTaskInput(req.body, false);
   if ('error' in v) return res.status(400).json({ error: v.error });
+  const lv = extractLabelIds((req.body || {}) as Record<string, unknown>);
+  if ('error' in lv) return res.status(400).json({ error: lv.error });
+  const labelIds = lv.value;
 
   const user = res.locals.user;
+  if (labelIds !== undefined && !labelsOwnedBy(labelIds, user.id)) {
+    return res.status(400).json({ error: 'Label not found' });
+  }
   const pageId = v.value.page_id ?? null;
   if (pageId && !pageOwnedBy(pageId, user.id)) {
     return res.status(400).json({ error: 'Page not found' });
@@ -1317,12 +1386,15 @@ app.post('/api/tasks', (req, res) => {
 
   const id = crypto.randomUUID();
   db.prepare(
-    `INSERT INTO tasks (id, owner_user_id, title, due_date, due_time, status, page_id)
-     VALUES (?, ?, ?, ?, ?, 'open', ?)`
-  ).run(id, user.id, v.value.title, v.value.due_date, v.value.due_time ?? null, pageId);
+    `INSERT INTO tasks (id, owner_user_id, title, due_date, due_time, status, priority, page_id)
+     VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`
+  ).run(id, user.id, v.value.title, v.value.due_date, v.value.due_time ?? null, v.value.priority ?? 'normal', pageId);
+
+  if (labelIds !== undefined) replaceTaskLabels(id, labelIds);
 
   const row: any = db.prepare(`${TASK_SELECT} WHERE id = ?`).get(id);
-  res.json({ task: toTask(row, todayIn(timezoneOf())) });
+  const labels = taskLabelsMap([id]).get(id) ?? [];
+  res.json({ task: { ...toTask(row, todayIn(timezoneOf())), labels } });
 });
 
 app.patch('/api/tasks/:id', (req, res) => {
@@ -1337,6 +1409,13 @@ app.patch('/api/tasks/:id', (req, res) => {
 
   const v = validateTaskInput(req.body, true);
   if ('error' in v) return res.status(400).json({ error: v.error });
+  const lv = extractLabelIds((req.body || {}) as Record<string, unknown>);
+  if ('error' in lv) return res.status(400).json({ error: lv.error });
+  const labelIds = lv.value;
+
+  if (labelIds !== undefined && !labelsOwnedBy(labelIds, user.id)) {
+    return res.status(400).json({ error: 'Label not found' });
+  }
 
   if (v.value.page_id && !pageOwnedBy(v.value.page_id, user.id)) {
     return res.status(400).json({ error: 'Page not found' });
@@ -1365,6 +1444,10 @@ app.patch('/api/tasks/:id', (req, res) => {
       sets.push('completed_at = NULL');
     }
   }
+  if (v.value.priority !== undefined) {
+    sets.push('priority = ?');
+    params.push(v.value.priority);
+  }
   if (v.value.page_id !== undefined) {
     sets.push('page_id = ?');
     params.push(v.value.page_id);
@@ -1373,8 +1456,10 @@ app.patch('/api/tasks/:id', (req, res) => {
   params.push(id);
 
   db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  if (labelIds !== undefined) replaceTaskLabels(id, labelIds);
   const row: any = db.prepare(`${TASK_SELECT} WHERE id = ?`).get(id);
-  res.json({ task: toTask(row, todayIn(timezoneOf())) });
+  const labels = taskLabelsMap([id]).get(id) ?? [];
+  res.json({ task: { ...toTask(row, todayIn(timezoneOf())), labels } });
 });
 
 app.delete('/api/tasks/:id', (req, res) => {
@@ -1389,6 +1474,180 @@ app.delete('/api/tasks/:id', (req, res) => {
 
   db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
   res.json({ success: true });
+});
+
+// 9b.7 Labels (auth-gated; labels are per-user, plan-06 LB1) -----------------
+// Same contract as the Hono backend (functions/api/[[route]].ts).
+
+function labelsOwnedBy(ids: string[], userId: string): boolean {
+  if (ids.length === 0) return true;
+  const placeholders = ids.map(() => '?').join(',');
+  const row: any = db
+    .prepare(`SELECT COUNT(*) AS n FROM labels WHERE id IN (${placeholders}) AND owner_user_id = ?`)
+    .get(...ids, userId);
+  return (row?.n ?? 0) === ids.length;
+}
+
+function taskLabelsMap(taskIds: string[]): Map<string, { id: string; name: string }[]> {
+  const map = new Map<string, { id: string; name: string }[]>();
+  for (let i = 0; i < taskIds.length; i += 50) {
+    const slice = taskIds.slice(i, i + 50);
+    const rows: any[] = db.prepare(
+      `SELECT tl.task_id AS item_id, l.id, l.name FROM task_labels tl
+         JOIN labels l ON l.id = tl.label_id
+         WHERE tl.task_id IN (${slice.map(() => '?').join(',')})`
+    ).all(...slice);
+    for (const row of rows) {
+      const list = map.get(row.item_id) ?? [];
+      list.push({ id: row.id, name: row.name });
+      map.set(row.item_id, list);
+    }
+  }
+  return map;
+}
+
+function eventLabelsMap(eventIds: string[]): Map<string, { id: string; name: string }[]> {
+  const map = new Map<string, { id: string; name: string }[]>();
+  for (let i = 0; i < eventIds.length; i += 50) {
+    const slice = eventIds.slice(i, i + 50);
+    const rows: any[] = db.prepare(
+      `SELECT el.event_id AS item_id, l.id, l.name FROM event_labels el
+         JOIN labels l ON l.id = el.label_id
+         WHERE el.event_id IN (${slice.map(() => '?').join(',')})`
+    ).all(...slice);
+    for (const row of rows) {
+      const list = map.get(row.item_id) ?? [];
+      list.push({ id: row.id, name: row.name });
+      map.set(row.item_id, list);
+    }
+  }
+  return map;
+}
+
+function replaceTaskLabels(taskId: string, labelIds: string[]): void {
+  const insert = db.prepare('INSERT INTO task_labels (task_id, label_id) VALUES (?, ?)');
+  db.transaction(() => {
+    db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(taskId);
+    for (const labelId of labelIds) insert.run(taskId, labelId);
+  })();
+}
+
+function replaceEventLabels(eventId: string, labelIds: string[]): void {
+  const insert = db.prepare('INSERT INTO event_labels (event_id, label_id) VALUES (?, ?)');
+  db.transaction(() => {
+    db.prepare('DELETE FROM event_labels WHERE event_id = ?').run(eventId);
+    for (const labelId of labelIds) insert.run(eventId, labelId);
+  })();
+}
+
+function replacePageLabels(pageId: string, labelIds: string[]): void {
+  const insert = db.prepare('INSERT INTO page_labels (page_id, label_id) VALUES (?, ?)');
+  db.transaction(() => {
+    db.prepare('DELETE FROM page_labels WHERE page_id = ?').run(pageId);
+    for (const labelId of labelIds) insert.run(pageId, labelId);
+  })();
+}
+
+app.get('/api/labels', (req, res) => {
+  const user = res.locals.user;
+  const labels = db.prepare(
+    'SELECT id, name FROM labels WHERE owner_user_id = ? ORDER BY name COLLATE NOCASE ASC'
+  ).all(user.id);
+  res.json({ labels });
+});
+
+app.post('/api/labels', (req, res) => {
+  const body = req.body || {};
+  const v = validateLabelName(body.name);
+  if ('error' in v) return res.status(400).json({ error: v.error });
+
+  const user = res.locals.user;
+  const duplicate = db.prepare(
+    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE'
+  ).get(user.id, v.value);
+  if (duplicate) return res.status(409).json({ error: 'Label already exists' });
+
+  const id = crypto.randomUUID();
+  db.prepare('INSERT INTO labels (id, owner_user_id, name) VALUES (?, ?, ?)')
+    .run(id, user.id, v.value);
+  res.json({ label: { id, name: v.value } });
+});
+
+app.patch('/api/labels/:id', (req, res) => {
+  const id = req.params.id;
+  const user = res.locals.user;
+  const existing = db.prepare(
+    'SELECT id FROM labels WHERE id = ? AND owner_user_id = ?'
+  ).get(id, user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  const body = req.body || {};
+  const v = validateLabelName(body.name);
+  if ('error' in v) return res.status(400).json({ error: v.error });
+
+  const duplicate = db.prepare(
+    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE'
+  ).get(user.id, v.value);
+  if (duplicate) return res.status(409).json({ error: 'Label already exists' });
+
+  db.prepare('UPDATE labels SET name = ? WHERE id = ?').run(v.value, id);
+  res.json({ label: { id, name: v.value } });
+});
+
+app.delete('/api/labels/:id', (req, res) => {
+  const id = req.params.id;
+  const user = res.locals.user;
+  const existing = db.prepare(
+    'SELECT id FROM labels WHERE id = ? AND owner_user_id = ?'
+  ).get(id, user.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  db.prepare('DELETE FROM labels WHERE id = ? AND owner_user_id = ?').run(id, user.id);
+  res.json({ success: true });
+});
+
+app.get('/api/labels/:id/items', (req, res) => {
+  const id = req.params.id;
+  const user = res.locals.user;
+  const label: any = db.prepare(
+    'SELECT id, name FROM labels WHERE id = ? AND owner_user_id = ?'
+  ).get(id, user.id);
+  if (!label) return res.status(404).json({ error: 'Not found' });
+
+  const today = todayIn(timezoneOf());
+
+  const pages = db.prepare(
+    `SELECT p.id, p.title, p.icon FROM page_labels pl
+       JOIN pages p ON p.id = pl.page_id
+       WHERE pl.label_id = ? AND p.owner_user_id = ? AND p.deleted_at IS NULL
+       ORDER BY p.title COLLATE NOCASE ASC`
+  ).all(id, user.id);
+
+  const taskRows: any[] = db.prepare(
+    `SELECT t.id, t.title, t.due_date, t.due_time, t.status, t.priority, t.page_id, t.completed_at
+       FROM task_labels tl JOIN tasks t ON t.id = tl.task_id
+       WHERE tl.label_id = ? AND t.owner_user_id = ?
+       ORDER BY t.due_date ASC,
+         CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END ASC,
+         (t.due_time IS NULL) DESC, t.due_time ASC, t.id ASC`
+  ).all(id, user.id);
+
+  const eventRows: any[] = db.prepare(
+    `SELECT e.id, e.title, e.event_date, e.start_time, e.end_time, e.created_at, e.updated_at
+       FROM event_labels el JOIN events e ON e.id = el.event_id
+       WHERE el.label_id = ? AND e.owner_user_id = ?
+       ORDER BY e.event_date ASC, (e.start_time IS NULL) DESC, e.start_time ASC, e.id ASC`
+  ).all(id, user.id);
+
+  const labelsByTask = taskLabelsMap(taskRows.map(row => row.id));
+  const labelsByEvent = eventLabelsMap(eventRows.map(row => row.id));
+
+  res.json({
+    label,
+    pages,
+    tasks: taskRows.map(row => ({ ...toTask(row, today), labels: labelsByTask.get(row.id) ?? [] })),
+    events: eventRows.map(row => ({ ...row, labels: labelsByEvent.get(row.id) ?? [] })),
+  });
 });
 
 // 9c. GET /api/link-preview?url=... — title, description, image, site name and

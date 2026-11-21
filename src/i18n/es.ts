@@ -100,6 +100,7 @@ export const es: Record<TranslationKey, string> = {
   'search.noResults': 'No se encontraron notas ni bloques que coincidan con "{query}".',
   'search.badgePage': 'Página',
   'search.badgeBlock': 'Bloque',
+  'search.badgeLabel': 'Etiqueta',
 
   // Common
   'common.loading': 'Cargando…',
@@ -572,4 +573,28 @@ export const es: Record<TranslationKey, string> = {
   'tasks.confirmDeleteBody': 'Esta tarea se eliminará permanentemente.',
   'tasks.loadError': 'No se pudieron cargar las tareas',
   'tasks.actionError': 'Algo salió mal',
+
+  // Etiquetas
+  'labels.title': 'Etiquetas',
+  'labels.addLabel': 'Añadir etiqueta',
+  'labels.namePlaceholder': 'Nombre de la etiqueta nueva',
+  'labels.create': 'Crear',
+  'labels.apply': 'Listo',
+  'labels.editLabels': 'Editar etiquetas',
+  'labels.delete': 'Eliminar etiqueta',
+  'labels.rename': 'Renombrar',
+  'labels.renameLabel': 'Nombre de la etiqueta',
+  'labels.deleteConfirmTitle': '¿Eliminar la etiqueta "{name}"?',
+  'labels.deleteConfirmBody': 'La etiqueta se quitará de todas las páginas, tareas y eventos.',
+  'labels.itemsPages': 'Páginas',
+  'labels.itemsTasks': 'Tareas',
+  'labels.itemsEvents': 'Eventos',
+  'labels.emptyView': 'Nada lleva esta etiqueta aún',
+  'labels.loadError': 'No se pudieron cargar las etiquetas',
+  'labels.notFound': 'Etiqueta no encontrada',
+  'labels.duplicate': 'Ya existe una etiqueta con este nombre',
+  'tasks.priority': 'Prioridad',
+  'tasks.priorityHigh': 'Alta',
+  'tasks.priorityNormal': 'Normal',
+  'tasks.priorityLow': 'Baja',
 };

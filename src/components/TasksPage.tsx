@@ -196,11 +196,15 @@ export function TasksPage() {
                 </button>
                 <button
                   type="button"
-                  className="tasks-row-title"
+                  className={`tasks-row-title${task.priority === 'high' ? ' tasks-row-title--high' : ''}${task.priority === 'low' ? ' tasks-row-title--low' : ''}`}
                   onClick={() => setEditing(task)}
                 >
+                  {task.priority === 'high' && <span className="task-prio-flag" aria-hidden="true">❗</span>}
                   {task.title}
                 </button>
+                {task.labels?.map(l => (
+                  <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+                ))}
                 <span className="tasks-row-date">{formatDue(task)}</span>
                 <button
                   type="button"

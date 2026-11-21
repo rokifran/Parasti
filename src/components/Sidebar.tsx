@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useMemo, useCallback, memo, useState } from '
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { usePageContext, buildPageTree } from '../contexts/PageContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { Page } from '../types';
+import { Label, Page } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useSidebar } from '../contexts/SidebarContext';
@@ -563,6 +563,18 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   // the pages themselves so they are the same on every device.
   const [recentPages, setRecentPages] = useState<RecentPageItem[]>(() => getRecentPages());
 
+  // Labels are reloaded on every navigation so a newly created label appears
+  // in the sidebar without a manual refresh.
+  const [labels, setLabels] = useState<Label[]>([]);
+  useEffect(() => {
+    const loadLabels = () => {
+      api.labels.list().then(r => setLabels(r.labels)).catch(() => {});
+    };
+    loadLabels();
+    window.addEventListener(STORAGE_EVENTS.LABELS_CHANGED, loadLabels);
+    return () => window.removeEventListener(STORAGE_EVENTS.LABELS_CHANGED, loadLabels);
+  }, [location.pathname]);
+
   useEffect(() => {
     const updateRecents = () => setRecentPages(getRecentPages());
     window.addEventListener(STORAGE_EVENTS.RECENTS_CHANGED, updateRecents);
@@ -857,6 +869,28 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* SECTION 4: LABELS */}
+          {!collapsed && labels.length > 0 && (
+            <div className="sidebar-section">
+              <div className="sidebar-section-header">
+                <span className="sidebar-section-title">{t('labels.title')}</span>
+              </div>
+              <div className="sidebar-recents-list">
+                {labels.map(l => (
+                  <div
+                    key={l.id}
+                    className={`sidebar-recent-item ${location.pathname === `/labels/${l.id}` ? 'active' : ''}`}
+                    onClick={() => navigate(`/labels/${l.id}`)}
+                    role="button"
+                    title={l.name}
+                  >
+                    <span className="sidebar-recent-title">{l.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

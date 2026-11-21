@@ -189,6 +189,22 @@
   color: var(--danger);
 }
 
+.tasks-row--today .tasks-row-date {
+  color: var(--warning);
+}
+
+.tasks-row-title--high {
+  font-weight: var(--fw-semibold);
+}
+
+.tasks-row-title--low {
+  color: var(--text-tertiary);
+}
+
+.task-prio-flag {
+  margin-right: var(--space-1);
+}
+
 .tasks-row-date {
   flex: none;
   font-size: var(--fs-xs);

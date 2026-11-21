@@ -11,6 +11,7 @@ import { EmptyState } from './components/EmptyState';
 import { PageView } from './components/PageView';
 import { CalendarPage } from './components/CalendarPage';
 import { TasksPage } from './components/TasksPage';
+import { LabelViewPage } from './components/LabelViewPage';
 import { Login } from './components/Login';
 import { SharedView } from './components/SharedView';
 
@@ -62,6 +63,7 @@ function App() {
                     <Route path="page/:id" element={<PageView />} />
                     <Route path="calendar" element={<CalendarPage />} />
                     <Route path="tasks" element={<TasksRoute />} />
+                    <Route path="labels/:id" element={<LabelViewPage />} />
                   </Route>
                 </Route>
               </Routes>

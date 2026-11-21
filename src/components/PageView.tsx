@@ -7,6 +7,7 @@ import { BlockEditor } from './BlockEditor';
 import { PlusIcon, ShareIcon, UploadIcon, TrashIcon } from './Icons';
 import { StarIcon, StarFilledIcon, FullWidthIcon, RestoreIcon } from './PageIcons';
 import { ConfirmDialog } from './ConfirmDialog';
+import { LabelPickerModal } from './LabelPickerModal';
 import { ReadOnlyBlock } from './ReadOnlyBlock';
 import { SharePopover } from './SharePopover';
 import { CoverBanner } from './CoverBanner';
@@ -47,6 +48,7 @@ export function PageView() {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const iconBtnRef = useRef<HTMLButtonElement | null>(null);
   const [iconAnchor, setIconAnchor] = useState<DOMRect | null>(null);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -170,6 +172,17 @@ export function PageView() {
 
   const handleToggleFullWidth = () => {
     updatePage(id, { full_width: !isFullWidth }).catch(err => console.error('Failed to update layout', err));
+  };
+
+  // Labels live only in the page detail, not in the page list, so the PUT
+  // response is the source of truth after a change.
+  const handleApplyLabels = async (ids: string[]) => {
+    try {
+      const res = await api.pages.update(id, { label_ids: ids });
+      setPage(prev => (prev ? { ...prev, labels: res.page.labels ?? [] } : prev));
+    } catch (err) {
+      console.error('Failed to save labels', err);
+    }
   };
 
   const handleRestore = async () => {
@@ -363,6 +376,17 @@ export function PageView() {
           />
         )}
 
+        <div className="page-labels-row">
+          {(page.labels ?? []).map(l => (
+            <span key={l.id} className="label-chip" onClick={() => navigate(`/labels/${l.id}`)}>{l.name}</span>
+          ))}
+          {!isTrashed && (
+            <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
+              {t('labels.addLabel')}
+            </button>
+          )}
+        </div>
+
         <input
           type="text"
           className="page-title"
@@ -374,6 +398,15 @@ export function PageView() {
           onKeyDown={handleTitleKeyDown}
         />
       </div>
+
+      {!isTrashed && (
+        <LabelPickerModal
+          open={labelPickerOpen}
+          onClose={() => setLabelPickerOpen(false)}
+          selected={(page.labels ?? []).map(l => l.id)}
+          onApply={handleApplyLabels}
+        />
+      )}
 
       {isTrashed ? (
         <>

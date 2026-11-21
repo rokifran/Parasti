@@ -99,6 +99,7 @@ export const en = {
   'search.noResults': 'No notes or blocks found matching "{query}".',
   'search.badgePage': 'Page',
   'search.badgeBlock': 'Block',
+  'search.badgeLabel': 'Label',
 
   // Common
   'common.loading': 'Loading…',
@@ -571,6 +572,30 @@ export const en = {
   'tasks.confirmDeleteBody': 'This task will be permanently removed.',
   'tasks.loadError': 'Failed to load tasks',
   'tasks.actionError': 'Something went wrong',
+
+  // Labels
+  'labels.title': 'Labels',
+  'labels.addLabel': 'Add label',
+  'labels.namePlaceholder': 'New label name',
+  'labels.create': 'Create',
+  'labels.apply': 'Done',
+  'labels.editLabels': 'Edit labels',
+  'labels.delete': 'Delete label',
+  'labels.rename': 'Rename',
+  'labels.renameLabel': 'Label name',
+  'labels.deleteConfirmTitle': 'Delete label "{name}"?',
+  'labels.deleteConfirmBody': 'The label will be removed from all pages, tasks and events.',
+  'labels.itemsPages': 'Pages',
+  'labels.itemsTasks': 'Tasks',
+  'labels.itemsEvents': 'Events',
+  'labels.emptyView': 'Nothing has this label yet',
+  'labels.loadError': 'Failed to load labels',
+  'labels.notFound': 'Label not found',
+  'labels.duplicate': 'A label with this name already exists',
+  'tasks.priority': 'Priority',
+  'tasks.priorityHigh': 'High',
+  'tasks.priorityNormal': 'Normal',
+  'tasks.priorityLow': 'Low',
 };
 
 export type TranslationKey = keyof typeof en;

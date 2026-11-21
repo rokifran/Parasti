@@ -607,6 +607,72 @@ server.tool(
   }
 );
 
+// Tool: list_labels
+server.tool(
+  'list_labels',
+  'List all labels in Parasti. Labels are per-user and can be attached to pages, tasks and events; use the returned IDs with the label items endpoint.',
+  {},
+  async () => {
+    try {
+      const res = await apiRequest<{ labels: Array<{ id: string; name: string }> }>('/api/labels');
+      if (res.labels.length === 0) {
+        return { content: [{ type: 'text', text: 'No labels found.' }] };
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: res.labels.map(label => `- ${label.name} (ID: ${label.id})`).join('\n'),
+          },
+        ],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to list labels: ${err.message}` }],
+      };
+    }
+  }
+);
+
+// Tool: find_by_label
+server.tool(
+  'find_by_label',
+  'Find everything carrying a label: pages, tasks and events grouped together. Matches the label name exactly (case-insensitive).',
+  {
+    name: z.string().describe('Label name, e.g. "diet"'),
+  },
+  async ({ name }) => {
+    try {
+      const { labels } = await apiRequest<{ labels: Array<{ id: string; name: string }> }>('/api/labels');
+      const wanted = name.trim().toLowerCase();
+      const label = labels.find(item => item.name.toLowerCase() === wanted);
+      if (!label) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: 'Label not found. Use list_labels to see the exact names.' }],
+        };
+      }
+
+      const items = await apiRequest<any>(`/api/labels/${encodeURIComponent(label.id)}/items`);
+      const summary = [
+        `Label: ${items.label.name} (ID: ${items.label.id})`,
+        `Pages: ${items.pages.length}`,
+        `Tasks: ${items.tasks.length}`,
+        `Events: ${items.events.length}`,
+      ].join('\n');
+      return {
+        content: [{ type: 'text', text: `${summary}\n\n${JSON.stringify(items, null, 2)}` }],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to find items for label: ${err.message}` }],
+      };
+    }
+  }
+);
+
 // Tool: create_task
 server.tool(
   'create_task',

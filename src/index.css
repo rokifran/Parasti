@@ -3363,8 +3363,21 @@ button:hover .icon-document,
   flex: 1;
 }
 
-.sidebar-label-edit {
+.sidebar-label-actions {
   flex: none;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.sidebar-recent-item:hover .sidebar-label-actions,
+.sidebar-recent-item.active .sidebar-label-actions,
+.sidebar-recent-item:focus-within .sidebar-label-actions {
+  opacity: 1;
+}
+
+.sidebar-label-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3376,23 +3389,21 @@ button:hover .icon-document,
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.1s, background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 
-.sidebar-recent-item:hover .sidebar-label-edit,
-.sidebar-recent-item.active .sidebar-label-edit,
-.sidebar-label-edit:focus-visible {
-  opacity: 1;
-}
-
-.sidebar-label-edit:hover {
+.sidebar-label-action:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
+.sidebar-label-action--danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 @media (hover: none) {
-  .sidebar-label-edit {
+  .sidebar-label-actions {
     opacity: 1;
   }
 }

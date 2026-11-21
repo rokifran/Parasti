@@ -38,11 +38,13 @@ import { AdminUsersModal } from './AdminUsersModal';
 import { ImportModal } from './ImportModal';
 import { LabelCreateModal } from './LabelCreateModal';
 import { LabelEditModal } from './LabelEditModal';
+import { ConfirmDialog } from './ConfirmDialog';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { TrashModal } from './TrashModal';
 import { TrashToast } from './TrashToast';
 import {
   getRecentPages,
+  notifyLabelsChanged,
   STORAGE_EVENTS,
   RecentPageItem,
 } from '../utils/workspaceStorage';
@@ -507,6 +509,8 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [labelCreateOpen, setLabelCreateOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<Label | null>(null);
+  const [deletingLabel, setDeletingLabel] = useState<Label | null>(null);
+  const [removingLabel, setRemovingLabel] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const workspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const userAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -632,6 +636,22 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
       console.error('Create page error:', err);
     }
   }, [createPage, refreshPages, navigate]);
+
+  const removeLabel = async () => {
+    if (!deletingLabel) return;
+    setRemovingLabel(true);
+    try {
+      await api.labels.remove(deletingLabel.id);
+      if (location.pathname === `/labels/${deletingLabel.id}`) navigate('/');
+      notifyLabelsChanged();
+      setDeletingLabel(null);
+    } catch (err) {
+      console.error('Delete label error:', err);
+      setDeletingLabel(null);
+    } finally {
+      setRemovingLabel(false);
+    }
+  };
 
   const isOverlayOpen = (isMobile && mobileOpen) || (!isMobile && isNarrow && !desktopCollapsed);
   const collapsed = !isMobile && desktopCollapsed;
@@ -911,15 +931,26 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                         <span className={`label-dot label-dot--${l.color}`} aria-hidden="true" />
                       )}
                       <span className="sidebar-recent-title">{l.name}</span>
-                      <button
-                        type="button"
-                        className="sidebar-label-edit"
-                        onClick={(e) => { e.stopPropagation(); setEditingLabel(l); }}
-                        title={t('labels.editLabel')}
-                        aria-label={t('labels.editLabel')}
-                      >
-                        <PencilIcon size={14} />
-                      </button>
+                      <div className="sidebar-label-actions">
+                        <button
+                          type="button"
+                          className="sidebar-label-action"
+                          onClick={(e) => { e.stopPropagation(); setEditingLabel(l); }}
+                          title={t('labels.editLabel')}
+                          aria-label={t('labels.editLabel')}
+                        >
+                          <PencilIcon size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="sidebar-label-action sidebar-label-action--danger"
+                          onClick={(e) => { e.stopPropagation(); setDeletingLabel(l); }}
+                          title={t('labels.delete')}
+                          aria-label={t('labels.delete')}
+                        >
+                          <TrashIcon size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1149,6 +1180,17 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
       <LabelEditModal
         label={editingLabel}
         onClose={() => setEditingLabel(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deletingLabel}
+        title={t('labels.deleteConfirmTitle', { name: deletingLabel?.name || '' })}
+        description={t('labels.deleteConfirmBody')}
+        confirmLabel={t('labels.delete')}
+        confirmTone="danger"
+        loading={removingLabel}
+        onConfirm={removeLabel}
+        onCancel={() => { if (!removingLabel) setDeletingLabel(null); }}
       />
       </>
     </DragStateContext.Provider>

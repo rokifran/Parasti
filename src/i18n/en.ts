@@ -593,6 +593,7 @@ export const en = {
   'labels.notFound': 'Label not found',
   'labels.duplicate': 'A label with this name already exists',
   'labels.newLabel': 'New label',
+  'labels.editLabel': 'Edit label',
   'labels.color': 'Color',
   'labels.colorDefault': 'Default',
   'labels.colorTerracotta': 'Terracotta',

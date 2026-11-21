@@ -3363,6 +3363,40 @@ button:hover .icon-document,
   flex: 1;
 }
 
+.sidebar-label-edit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, background 0.12s, color 0.12s;
+}
+
+.sidebar-recent-item:hover .sidebar-label-edit,
+.sidebar-recent-item.active .sidebar-label-edit,
+.sidebar-label-edit:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-label-edit:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+@media (hover: none) {
+  .sidebar-label-edit {
+    opacity: 1;
+  }
+}
+
 /* Sidebar Footer User Info */
 .sidebar-user {
   display: flex;

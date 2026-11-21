@@ -24,6 +24,7 @@ import {
   TrashIcon,
   CalendarIcon,
   CheckSquareIcon,
+  PencilIcon,
 } from './Icons';
 import { StarIcon, StarFilledIcon, DuplicateIcon } from './PageIcons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -36,6 +37,7 @@ import { ChangePasswordModal } from './ChangePasswordModal';
 import { AdminUsersModal } from './AdminUsersModal';
 import { ImportModal } from './ImportModal';
 import { LabelCreateModal } from './LabelCreateModal';
+import { LabelEditModal } from './LabelEditModal';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { TrashModal } from './TrashModal';
 import { TrashToast } from './TrashToast';
@@ -504,6 +506,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   const { t } = useLanguage();
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [labelCreateOpen, setLabelCreateOpen] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<Label | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const workspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const userAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -908,6 +911,15 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                         <span className={`label-dot label-dot--${l.color}`} aria-hidden="true" />
                       )}
                       <span className="sidebar-recent-title">{l.name}</span>
+                      <button
+                        type="button"
+                        className="sidebar-label-edit"
+                        onClick={(e) => { e.stopPropagation(); setEditingLabel(l); }}
+                        title={t('labels.editLabel')}
+                        aria-label={t('labels.editLabel')}
+                      >
+                        <PencilIcon size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1132,6 +1144,11 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
       <LabelCreateModal
         open={labelCreateOpen}
         onClose={() => setLabelCreateOpen(false)}
+      />
+
+      <LabelEditModal
+        label={editingLabel}
+        onClose={() => setEditingLabel(null)}
       />
       </>
     </DragStateContext.Provider>

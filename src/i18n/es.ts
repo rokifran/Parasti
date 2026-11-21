@@ -594,6 +594,7 @@ export const es: Record<TranslationKey, string> = {
   'labels.notFound': 'Etiqueta no encontrada',
   'labels.duplicate': 'Ya existe una etiqueta con este nombre',
   'labels.newLabel': 'Nueva etiqueta',
+  'labels.editLabel': 'Editar etiqueta',
   'labels.color': 'Color',
   'labels.colorDefault': 'Predeterminado',
   'labels.colorTerracotta': 'Terracota',

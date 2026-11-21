@@ -452,6 +452,20 @@ export function TagIcon({ size = 16, ...rest }: IconProps) {
   );
 }
 
+export function PencilIcon({ size = 16, ...rest }: IconProps) {
+  return (
+    <motion.svg
+      {...base(size)}
+      whileHover={{ scale: 1.1 }}
+      transition={springTransition}
+      {...rest}
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </motion.svg>
+  );
+}
+
 export function ListBulletIcon({ size = 16, ...rest }: IconProps) {
   return (
     <motion.svg

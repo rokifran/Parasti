@@ -24,3 +24,16 @@ export function extractLabelIds(
   if (ids.length > MAX_LABELS_PER_ITEM) return { error: 'Too many labels' };
   return { value: ids };
 }
+
+export const LABEL_COLORS = ['terracotta', 'biru', 'olive', 'plum', 'teal', 'cokelat'] as const;
+
+export type LabelColor = (typeof LABEL_COLORS)[number];
+
+// undefined/null/'' => null (no color). A present value must be a palette key.
+export function validateLabelColor(raw: unknown): { error: string } | { value: LabelColor | null } {
+  if (raw === undefined || raw === null || raw === '') return { value: null };
+  if (typeof raw !== 'string' || !(LABEL_COLORS as readonly string[]).includes(raw)) {
+    return { error: 'Invalid color' };
+  }
+  return { value: raw as LabelColor };
+}

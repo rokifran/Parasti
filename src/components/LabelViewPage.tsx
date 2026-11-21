@@ -6,10 +6,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type { CalendarEvent, Label, Task } from '../types';
+import { LABEL_COLORS } from '../../server/shared/labels';
+import { todayIn, addDays } from '../../server/shared/tasks';
+import { useConfig } from '../contexts/ConfigContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { notifyLabelsChanged } from '../utils/workspaceStorage';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TaskEditModal } from './TaskEditModal';
+import { LabelChip } from './LabelChip';
+import { LabelColorPalette } from './LabelColorPalette';
 import { LoaderIcon, TagIcon } from './Icons';
 
 interface LabelItems {
@@ -23,6 +28,8 @@ export function LabelViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { config } = useConfig();
+  const tomorrow = addDays(todayIn(config.timezone), 1);
 
   const [data, setData] = useState<LabelItems | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +38,7 @@ export function LabelViewPage() {
 
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState('');
+  const [color, setColor] = useState<string | null>(null);
   const [savingName, setSavingName] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
 
@@ -46,6 +54,7 @@ export function LabelViewPage() {
       .then(res => {
         setData(res);
         setName(res.label.name);
+        setColor(res.label.color ?? null);
         setNotFound(false);
       })
       .catch(err => {
@@ -61,6 +70,7 @@ export function LabelViewPage() {
   const startRename = () => {
     if (!data) return;
     setName(data.label.name);
+    setColor(data.label.color ?? null);
     setRenameError(null);
     setRenaming(true);
   };
@@ -72,8 +82,17 @@ export function LabelViewPage() {
     setSavingName(true);
     setRenameError(null);
     try {
-      const res = await api.labels.rename(data.label.id, trimmed);
-      setData(prev => (prev ? { ...prev, label: res.label } : prev));
+      const res = await api.labels.rename(data.label.id, trimmed, color);
+      setData(prev => {
+        if (!prev) return prev;
+        const patch = (l: Label) => (l.id === res.label.id ? { ...l, name: res.label.name, color: res.label.color } : l);
+        return {
+          ...prev,
+          label: res.label,
+          tasks: prev.tasks.map(task => ({ ...task, labels: task.labels.map(patch) })),
+          events: prev.events.map(event => ({ ...event, labels: event.labels.map(patch) })),
+        };
+      });
       setRenaming(false);
       notifyLabelsChanged();
     } catch (err) {
@@ -119,7 +138,13 @@ export function LabelViewPage() {
   return (
     <div className="tasks-page">
       <header className="tasks-header">
-        <h1 className="tasks-title"><TagIcon size={18} /> {data.label.name}</h1>
+        <h1 className="tasks-title">
+          <TagIcon size={18} />
+          {data.label.color && (LABEL_COLORS as readonly string[]).includes(data.label.color) && (
+            <span className={`label-dot label-dot--${data.label.color}`} aria-hidden="true" />
+          )}
+          {data.label.name}
+        </h1>
         <div className="label-view-actions">
           <button type="button" className="tasks-tab" onClick={startRename}>{t('labels.rename')}</button>
           <button type="button" className="tasks-tab" onClick={() => setConfirmDelete(true)}>{t('labels.delete')}</button>
@@ -140,6 +165,7 @@ export function LabelViewPage() {
               if (e.key === 'Escape') setRenaming(false);
             }}
           />
+          <LabelColorPalette value={color} onChange={setColor} />
           <button type="button" className="tasks-add-btn" onClick={saveRename} disabled={savingName}>
             {savingName ? <LoaderIcon size={14} /> : t('common.save')}
           </button>
@@ -180,7 +206,10 @@ export function LabelViewPage() {
               <h2 className="label-view-section-title">{t('labels.itemsTasks')}</h2>
               <ul className="tasks-list">
                 {data.tasks.map(task => (
-                  <li key={task.id} className={`tasks-row tasks-row--${task.bucket}`}>
+                  <li
+                    key={task.id}
+                    className={`tasks-row tasks-row--${task.bucket}${task.due_date === tomorrow && task.bucket === 'upcoming' ? ' tasks-row--h1' : ''}`}
+                  >
                     <button
                       type="button"
                       className={`tasks-row-title${task.priority === 'high' ? ' tasks-row-title--high' : ''}${task.priority === 'low' ? ' tasks-row-title--low' : ''}`}
@@ -190,7 +219,7 @@ export function LabelViewPage() {
                       {task.title}
                     </button>
                     {task.labels?.map(l => (
-                      <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+                      <LabelChip key={l.id} label={l} />
                     ))}
                     <span className="tasks-row-date">
                       {task.due_date}{task.due_time ? ` · ${task.due_time}` : ''}

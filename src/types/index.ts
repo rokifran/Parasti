@@ -20,7 +20,7 @@ export interface Page {
   children?: Page[];
 }
 
-export interface Label { id: string; name: string; }
+export interface Label { id: string; name: string; color: string | null; }
 
 // A row of the Trash list (GET /pages/trash): only trashed pages whose parent
 // is not trashed, so a restore brings the whole subtree back.

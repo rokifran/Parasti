@@ -8,6 +8,7 @@ import type { Label, Task } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
+import { LabelChip } from './LabelChip';
 import { CheckSquareIcon, LoaderIcon, XIcon } from './Icons';
 
 interface Props {
@@ -125,7 +126,7 @@ export function TaskEditModal({ task, onClose, onSaved }: Props) {
             </div>
             <div className="event-modal-labels">
               {pickedLabels.map(l => (
-                <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+                <LabelChip key={l.id} label={l} />
               ))}
               <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
                 {t('labels.editLabels')}

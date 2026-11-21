@@ -4,7 +4,7 @@ import { parseMarkdownToBlocks, blocksToMarkdown } from '../../server/shared/mar
 import { parseBlockProps, serializeBlockProps } from '../../server/shared/blockProps';
 import { validateEventInput, validateEventRange } from '../../server/shared/events';
 import { parseFeatures } from '../../server/shared/features';
-import { validateLabelName, extractLabelIds } from '../../server/shared/labels';
+import { validateLabelName, extractLabelIds, validateLabelColor, LABEL_COLORS } from '../../server/shared/labels';
 import {
   validateTaskInput,
   todayIn,
@@ -1254,7 +1254,7 @@ app.get('/pages/:id', async (c) => {
   ).bind(id).all();
 
   const { results: labels } = await c.env.DB.prepare(
-    `SELECT l.id, l.name FROM page_labels pl
+    `SELECT l.id, l.name, l.color FROM page_labels pl
        JOIN labels l ON l.id = pl.label_id
        WHERE pl.page_id = ? AND l.owner_user_id = ?`
   ).bind(id, user.id).all();
@@ -1323,7 +1323,7 @@ app.put('/pages/:id', async (c) => {
   const page = await c.env.DB.prepare('SELECT * FROM pages WHERE id = ?').bind(id).first();
   if (labelIds !== undefined) await replacePageLabels(c.env.DB, id, labelIds);
   const { results: labels } = await c.env.DB.prepare(
-    `SELECT l.id, l.name FROM page_labels pl
+    `SELECT l.id, l.name, l.color FROM page_labels pl
        JOIN labels l ON l.id = pl.label_id
        WHERE pl.page_id = ? AND l.owner_user_id = ?`
   ).bind(id, user.id).all();
@@ -1951,33 +1951,33 @@ async function labelsOwnedBy(db: D1Database, ids: string[], userId: string): Pro
   return (row?.n ?? 0) === ids.length;
 }
 
-async function taskLabelsMap(db: D1Database, taskIds: string[]): Promise<Map<string, { id: string; name: string }[]>> {
-  const map = new Map<string, { id: string; name: string }[]>();
+async function taskLabelsMap(db: D1Database, taskIds: string[]): Promise<Map<string, { id: string; name: string; color: string | null }[]>> {
+  const map = new Map<string, { id: string; name: string; color: string | null }[]>();
   if (taskIds.length === 0) return map;
   const rows = await selectIn(
     db,
-    'SELECT tl.task_id AS item_id, l.id, l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id IN',
+    'SELECT tl.task_id AS item_id, l.id, l.name, l.color FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id IN',
     taskIds
   );
   for (const row of rows) {
     const list = map.get(row.item_id) ?? [];
-    list.push({ id: row.id, name: row.name });
+    list.push({ id: row.id, name: row.name, color: row.color ?? null });
     map.set(row.item_id, list);
   }
   return map;
 }
 
-async function eventLabelsMap(db: D1Database, eventIds: string[]): Promise<Map<string, { id: string; name: string }[]>> {
-  const map = new Map<string, { id: string; name: string }[]>();
+async function eventLabelsMap(db: D1Database, eventIds: string[]): Promise<Map<string, { id: string; name: string; color: string | null }[]>> {
+  const map = new Map<string, { id: string; name: string; color: string | null }[]>();
   if (eventIds.length === 0) return map;
   const rows = await selectIn(
     db,
-    'SELECT el.event_id AS item_id, l.id, l.name FROM event_labels el JOIN labels l ON l.id = el.label_id WHERE el.event_id IN',
+    'SELECT el.event_id AS item_id, l.id, l.name, l.color FROM event_labels el JOIN labels l ON l.id = el.label_id WHERE el.event_id IN',
     eventIds
   );
   for (const row of rows) {
     const list = map.get(row.item_id) ?? [];
-    list.push({ id: row.id, name: row.name });
+    list.push({ id: row.id, name: row.name, color: row.color ?? null });
     map.set(row.item_id, list);
   }
   return map;
@@ -2010,7 +2010,7 @@ async function replacePageLabels(db: D1Database, pageId: string, labelIds: strin
 app.get('/labels', async (c) => {
   const user = c.get('user');
   const { results } = await c.env.DB.prepare(
-    'SELECT id, name FROM labels WHERE owner_user_id = ? ORDER BY name COLLATE NOCASE ASC'
+    'SELECT id, name, color FROM labels WHERE owner_user_id = ? ORDER BY name COLLATE NOCASE ASC'
   ).bind(user.id).all();
   return c.json({ labels: results || [] });
 });
@@ -2019,6 +2019,8 @@ app.post('/labels', async (c) => {
   const body = (await c.req.json().catch(() => null)) || {};
   const v = validateLabelName(body.name);
   if ('error' in v) return c.json({ error: v.error }, 400);
+  const cv = validateLabelColor(body.color ?? null);
+  if ('error' in cv) return c.json({ error: cv.error }, 400);
 
   const user = c.get('user');
   const duplicate = await c.env.DB.prepare(
@@ -2028,16 +2030,16 @@ app.post('/labels', async (c) => {
 
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    'INSERT INTO labels (id, owner_user_id, name) VALUES (?, ?, ?)'
-  ).bind(id, user.id, v.value).run();
-  return c.json({ label: { id, name: v.value } });
+    'INSERT INTO labels (id, owner_user_id, name, color) VALUES (?, ?, ?, ?)'
+  ).bind(id, user.id, v.value, cv.value).run();
+  return c.json({ label: { id, name: v.value, color: cv.value } });
 });
 
 app.patch('/labels/:id', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
-  const existing = await c.env.DB.prepare(
-    'SELECT id FROM labels WHERE id = ? AND owner_user_id = ?'
+  const existing: any = await c.env.DB.prepare(
+    'SELECT id, name, color FROM labels WHERE id = ? AND owner_user_id = ?'
   ).bind(id, user.id).first();
   if (!existing) return c.json({ error: 'Not found' }, 404);
 
@@ -2046,12 +2048,19 @@ app.patch('/labels/:id', async (c) => {
   if ('error' in v) return c.json({ error: v.error }, 400);
 
   const duplicate = await c.env.DB.prepare(
-    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE'
-  ).bind(user.id, v.value).first();
+    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE AND id != ?'
+  ).bind(user.id, v.value, id).first();
   if (duplicate) return c.json({ error: 'Label already exists' }, 409);
 
-  await c.env.DB.prepare('UPDATE labels SET name = ? WHERE id = ?').bind(v.value, id).run();
-  return c.json({ label: { id, name: v.value } });
+  let newColor: string | null = existing.color ?? null;
+  if (body.color !== undefined) {
+    const cv = validateLabelColor(body.color);
+    if ('error' in cv) return c.json({ error: cv.error }, 400);
+    newColor = cv.value;
+  }
+
+  await c.env.DB.prepare('UPDATE labels SET name = ?, color = ? WHERE id = ?').bind(v.value, newColor, id).run();
+  return c.json({ label: { id, name: v.value, color: newColor } });
 });
 
 app.delete('/labels/:id', async (c) => {
@@ -2068,7 +2077,7 @@ app.get('/labels/:id/items', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
   const label: any = await c.env.DB.prepare(
-    'SELECT id, name FROM labels WHERE id = ? AND owner_user_id = ?'
+    'SELECT id, name, color FROM labels WHERE id = ? AND owner_user_id = ?'
   ).bind(id, user.id).first();
   if (!label) return c.json({ error: 'Not found' }, 404);
 

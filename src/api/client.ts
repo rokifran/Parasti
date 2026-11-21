@@ -287,10 +287,10 @@ export const api = {
   },
   labels: {
     list: () => request<{ labels: Label[] }>('/labels'),
-    create: (name: string) =>
-      request<{ label: Label }>('/labels', { method: 'POST', body: JSON.stringify({ name }) }),
-    rename: (id: string, name: string) =>
-      request<{ label: Label }>(`/labels/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    create: (name: string, color?: string | null) =>
+      request<{ label: Label }>('/labels', { method: 'POST', body: JSON.stringify({ name, color }) }),
+    rename: (id: string, name: string, color?: string | null) =>
+      request<{ label: Label }>(`/labels/${id}`, { method: 'PATCH', body: JSON.stringify({ name, color }) }),
     remove: (id: string) =>
       request<{ success: boolean }>(`/labels/${id}`, { method: 'DELETE' }),
     items: (id: string) =>

@@ -95,6 +95,7 @@ const EXPECTED_COLUMNS: { table: string; column: string; ddl: string }[] = [
   { table: 'files', column: 'owner_user_id', ddl: 'owner_user_id TEXT' },
   { table: 'api_tokens', column: 'user_id', ddl: 'user_id TEXT' },
   { table: 'tasks', column: 'priority', ddl: "priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('high', 'normal', 'low'))" },
+  { table: 'labels', column: 'color', ddl: 'color TEXT' },
 ];
 
 function healSchema(): void {

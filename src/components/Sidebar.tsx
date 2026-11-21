@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { usePageContext, buildPageTree } from '../contexts/PageContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { Label, Page } from '../types';
+import { LABEL_COLORS } from '../../server/shared/labels';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useSidebar } from '../contexts/SidebarContext';
@@ -34,6 +35,7 @@ import { ApiTokenModal } from './ApiTokenModal';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { AdminUsersModal } from './AdminUsersModal';
 import { ImportModal } from './ImportModal';
+import { LabelCreateModal } from './LabelCreateModal';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { TrashModal } from './TrashModal';
 import { TrashToast } from './TrashToast';
@@ -501,6 +503,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   } = useSidebar();
   const { t } = useLanguage();
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [labelCreateOpen, setLabelCreateOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const workspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const userAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -873,24 +876,42 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           )}
 
           {/* SECTION 4: LABELS */}
-          {!collapsed && labels.length > 0 && (
+          {!collapsed && (
             <div className="sidebar-section">
               <div className="sidebar-section-header">
                 <span className="sidebar-section-title">{t('labels.title')}</span>
+                <button
+                  className="sidebar-section-add-btn"
+                  onClick={() => setLabelCreateOpen(true)}
+                  title={t('labels.addLabel')}
+                  aria-label={t('labels.addLabel')}
+                >
+                  <PlusIcon size={16} />
+                </button>
               </div>
-              <div className="sidebar-recents-list">
-                {labels.map(l => (
-                  <div
-                    key={l.id}
-                    className={`sidebar-recent-item ${location.pathname === `/labels/${l.id}` ? 'active' : ''}`}
-                    onClick={() => navigate(`/labels/${l.id}`)}
-                    role="button"
-                    title={l.name}
-                  >
-                    <span className="sidebar-recent-title">{l.name}</span>
-                  </div>
-                ))}
-              </div>
+              {labels.length === 0 ? (
+                <div className="sidebar-empty-hint" onClick={() => setLabelCreateOpen(true)}>
+                  <PlusIcon size={16} />
+                  <span>{t('labels.addLabel')}</span>
+                </div>
+              ) : (
+                <div className="sidebar-recents-list">
+                  {labels.map(l => (
+                    <div
+                      key={l.id}
+                      className={`sidebar-recent-item ${location.pathname === `/labels/${l.id}` ? 'active' : ''}`}
+                      onClick={() => navigate(`/labels/${l.id}`)}
+                      role="button"
+                      title={l.name}
+                    >
+                      {l.color && (LABEL_COLORS as readonly string[]).includes(l.color) && (
+                        <span className={`label-dot label-dot--${l.color}`} aria-hidden="true" />
+                      )}
+                      <span className="sidebar-recent-title">{l.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1106,6 +1127,11 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           // Refresh so the new page shows up in the tree immediately.
           await refreshPages();
         }}
+      />
+
+      <LabelCreateModal
+        open={labelCreateOpen}
+        onClose={() => setLabelCreateOpen(false)}
       />
       </>
     </DragStateContext.Provider>

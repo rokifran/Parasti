@@ -112,6 +112,19 @@
   --danger-soft: rgba(178, 58, 50, 0.1);
   --warning: #8A6A1B;
 
+  --label-terracotta: #A34A2C;
+  --label-biru: #2F5D7C;
+  --label-olive: #55632F;
+  --label-plum: #7A3B5C;
+  --label-teal: #2E6B62;
+  --label-cokelat: #7A4A21;
+  --label-terracotta-soft: rgba(163, 74, 44, 0.14);
+  --label-biru-soft: rgba(47, 93, 124, 0.14);
+  --label-olive-soft: rgba(85, 99, 47, 0.14);
+  --label-plum-soft: rgba(122, 59, 92, 0.14);
+  --label-teal-soft: rgba(46, 107, 98, 0.14);
+  --label-cokelat-soft: rgba(122, 74, 33, 0.14);
+
   --focus-ring: rgba(192, 90, 60, 0.45);
   --selection-bg: rgba(192, 90, 60, 0.22);
 
@@ -163,6 +176,19 @@
   --danger: #E8786F;
   --danger-soft: rgba(232, 120, 111, 0.12);
   --warning: #D9A93E;
+
+  --label-terracotta: #E08A6C;
+  --label-biru: #8FB7D1;
+  --label-olive: #A9B877;
+  --label-plum: #D48FAE;
+  --label-teal: #7FBFB2;
+  --label-cokelat: #C89A6B;
+  --label-terracotta-soft: rgba(224, 138, 108, 0.16);
+  --label-biru-soft: rgba(143, 183, 209, 0.16);
+  --label-olive-soft: rgba(169, 184, 119, 0.16);
+  --label-plum-soft: rgba(212, 143, 174, 0.16);
+  --label-teal-soft: rgba(127, 191, 178, 0.16);
+  --label-cokelat-soft: rgba(200, 154, 107, 0.16);
 
   --focus-ring: rgba(224, 138, 108, 0.5);
   --selection-bg: rgba(224, 138, 108, 0.28);

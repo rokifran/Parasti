@@ -6,7 +6,7 @@
   color: var(--text-secondary); font-size: var(--fs-xs);
   cursor: pointer;
 }
-.label-chip:hover { border-color: var(--accent); color: var(--accent-text); }
+.label-chip:hover { border-color: var(--accent); }
 .label-chip--static { cursor: default; }
 .label-chip--add { border-style: dashed; }
 .page-labels-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
@@ -16,7 +16,7 @@
 /* Picker + the chip row shared by the task and event modals. */
 .event-modal-labels { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .label-picker-list {
-  display: flex; flex-direction: column; gap: var(--space-1);
+  display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-1);
   max-height: 220px; overflow-y: auto;
 }
 .label-picker-item {
@@ -53,4 +53,56 @@
 
 @media (max-width: 640px) {
   .tasks-row .label-chip--static { display: none; }
+}
+
+/* Chip label penuh warna: border + teks dari token label; latar tetap netral.
+   Soft fill + centang hanya saat chip terpilih di picker (LabelChip selected). */
+.label-chip--selected { background: var(--bg-active); border-style: solid; }
+.label-chip--terracotta { border-color: var(--label-terracotta); color: var(--label-terracotta); }
+.label-chip--biru { border-color: var(--label-biru); color: var(--label-biru); }
+.label-chip--olive { border-color: var(--label-olive); color: var(--label-olive); }
+.label-chip--plum { border-color: var(--label-plum); color: var(--label-plum); }
+.label-chip--teal { border-color: var(--label-teal); color: var(--label-teal); }
+.label-chip--cokelat { border-color: var(--label-cokelat); color: var(--label-cokelat); }
+.label-chip--selected.label-chip--terracotta { background: var(--label-terracotta-soft); }
+.label-chip--selected.label-chip--biru { background: var(--label-biru-soft); }
+.label-chip--selected.label-chip--olive { background: var(--label-olive-soft); }
+.label-chip--selected.label-chip--plum { background: var(--label-plum-soft); }
+.label-chip--selected.label-chip--teal { background: var(--label-teal-soft); }
+.label-chip--selected.label-chip--cokelat { background: var(--label-cokelat-soft); }
+/* Hover tidak boleh menimpa warna label dengan warna aksen. */
+.label-chip--terracotta:hover { border-color: var(--label-terracotta); color: var(--label-terracotta); }
+.label-chip--biru:hover { border-color: var(--label-biru); color: var(--label-biru); }
+.label-chip--olive:hover { border-color: var(--label-olive); color: var(--label-olive); }
+.label-chip--plum:hover { border-color: var(--label-plum); color: var(--label-plum); }
+.label-chip--teal:hover { border-color: var(--label-teal); color: var(--label-teal); }
+.label-chip--cokelat:hover { border-color: var(--label-cokelat); color: var(--label-cokelat); }
+
+/* Dot warna untuk sidebar dan header label view. */
+.label-dot { width: 8px; height: 8px; border-radius: var(--radius-full); flex: none; }
+.label-dot--terracotta { background: var(--label-terracotta); }
+.label-dot--biru { background: var(--label-biru); }
+.label-dot--olive { background: var(--label-olive); }
+.label-dot--plum { background: var(--label-plum); }
+.label-dot--teal { background: var(--label-teal); }
+.label-dot--cokelat { background: var(--label-cokelat); }
+
+/* Palet preset (LabelColorPalette). */
+.label-palette { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.label-palette-title { font-size: var(--fs-xs); color: var(--text-secondary); }
+.label-swatch {
+  width: 18px; height: 18px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  padding: 0; cursor: pointer;
+}
+.label-swatch--default { background: var(--bg-tertiary); border-style: dashed; }
+.label-swatch--terracotta { background: var(--label-terracotta); }
+.label-swatch--biru { background: var(--label-biru); }
+.label-swatch--olive { background: var(--label-olive); }
+.label-swatch--plum { background: var(--label-plum); }
+.label-swatch--teal { background: var(--label-teal); }
+.label-swatch--cokelat { background: var(--label-cokelat); }
+.label-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 3.5px var(--text-primary);
 }

@@ -8,6 +8,7 @@ import { PlusIcon, ShareIcon, UploadIcon, TrashIcon } from './Icons';
 import { StarIcon, StarFilledIcon, FullWidthIcon, RestoreIcon } from './PageIcons';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
+import { LabelChip } from './LabelChip';
 import { ReadOnlyBlock } from './ReadOnlyBlock';
 import { SharePopover } from './SharePopover';
 import { CoverBanner } from './CoverBanner';
@@ -378,7 +379,7 @@ export function PageView() {
 
         <div className="page-labels-row">
           {(page.labels ?? []).map(l => (
-            <span key={l.id} className="label-chip" onClick={() => navigate(`/labels/${l.id}`)}>{l.name}</span>
+            <LabelChip key={l.id} label={l} onClick={() => navigate(`/labels/${l.id}`)} />
           ))}
           {!isTrashed && (
             <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>

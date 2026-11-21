@@ -8,6 +8,8 @@ import { api, ApiError } from '../api/client';
 import type { Label } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { notifyLabelsChanged } from '../utils/workspaceStorage';
+import { LabelChip } from './LabelChip';
+import { LabelColorPalette } from './LabelColorPalette';
 import { XIcon } from './Icons';
 
 interface Props {
@@ -22,6 +24,7 @@ export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
   const [labels, setLabels] = useState<Label[]>([]);
   const [ids, setIds] = useState<string[]>(selected);
   const [name, setName] = useState('');
+  const [newColor, setNewColor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -31,6 +34,7 @@ export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
     if (!open) return;
     setIds(selected);
     setName('');
+    setNewColor(null);
     setError(null);
     setLoading(true);
     api.labels.list()
@@ -64,10 +68,11 @@ export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
     setCreating(true);
     setError(null);
     try {
-      const res = await api.labels.create(trimmed);
+      const res = await api.labels.create(trimmed, newColor);
       setLabels(prev => [...prev, res.label].sort((a, b) => a.name.localeCompare(b.name)));
       setIds(prev => [...prev, res.label.id]);
       setName('');
+      setNewColor(null);
       notifyLabelsChanged();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) setError(t('labels.duplicate'));
@@ -98,14 +103,12 @@ export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
           ) : (
             <div className="label-picker-list">
               {labels.map(label => (
-                <label key={label.id} className="label-picker-item">
-                  <input
-                    type="checkbox"
-                    checked={ids.includes(label.id)}
-                    onChange={() => toggle(label.id)}
-                  />
-                  <span>{label.name}</span>
-                </label>
+                <LabelChip
+                  key={label.id}
+                  label={label}
+                  selected={ids.includes(label.id)}
+                  onClick={() => toggle(label.id)}
+                />
               ))}
             </div>
           )}
@@ -123,6 +126,7 @@ export function LabelPickerModal({ open, onClose, selected, onApply }: Props) {
               {t('labels.create')}
             </button>
           </div>
+          <LabelColorPalette value={newColor} onChange={setNewColor} />
           {error && <div className="event-modal-error" role="alert">{error}</div>}
         </div>
 

@@ -11,6 +11,7 @@ import { CalendarEvent, Label } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
+import { LabelChip } from './LabelChip';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightSmallIcon, PlusIcon, XIcon } from './Icons';
 
 type View = 'day' | 'month' | 'year';
@@ -346,7 +347,7 @@ function EventModal({ initialDate, event, onClose, onSaved }: {
             {!start && <div className="event-modal-hint">{t('calendar.allDay')}</div>}
             <div className="event-modal-labels">
               {pickedLabels.map(l => (
-                <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+                <LabelChip key={l.id} label={l} />
               ))}
               <button type="button" className="label-chip label-chip--add" onClick={() => setLabelPickerOpen(true)}>
                 {t('labels.editLabels')}

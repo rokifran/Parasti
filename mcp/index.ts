@@ -614,7 +614,7 @@ server.tool(
   {},
   async () => {
     try {
-      const res = await apiRequest<{ labels: Array<{ id: string; name: string }> }>('/api/labels');
+      const res = await apiRequest<{ labels: Array<{ id: string; name: string; color: string | null }> }>('/api/labels');
       if (res.labels.length === 0) {
         return { content: [{ type: 'text', text: 'No labels found.' }] };
       }
@@ -622,7 +622,7 @@ server.tool(
         content: [
           {
             type: 'text',
-            text: res.labels.map(label => `- ${label.name} (ID: ${label.id})`).join('\n'),
+            text: res.labels.map(label => `- ${label.name} (ID: ${label.id}, color: ${label.color || 'none'})`).join('\n'),
           },
         ],
       };

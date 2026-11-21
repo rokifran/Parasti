@@ -94,6 +94,22 @@ Diukur dengan rumus relatif luminance WCAG. Syarat: teks normal ≥ 4,5:1, teks 
 - `--accent` aman untuk ikon, garis, dan focus ring (≥ 3:1 terhadap latar).
 - Jangan pakai `--ghost` untuk teks atau ikon yang harus terbaca. Kontrasnya di bawah 3:1 dan hanya untuk dekorasi.
 
+### 2.5 Warna label (paket 07)
+
+Warna label opsional per label. Nilai teks/border chip memakai `--label-<nama>`;
+latar chip terpilih di picker memakai `--label-<nama>-soft` (rgba ~14–16%).
+Amber tanggal (`--warning`) dan merah error (`--danger`) sengaja tidak ada di
+palet label agar makna semantik tidak bentrok.
+
+| Nama | Terang | Gelap |
+|---|---|---|
+| terracotta | `#A34A2C` | `#E08A6C` |
+| biru | `#2F5D7C` | `#8FB7D1` |
+| olive | `#55632F` | `#A9B877` |
+| plum | `#7A3B5C` | `#D48FAE` |
+| teal | `#2E6B62` | `#7FBFB2` |
+| cokelat | `#7A4A21` | `#C89A6B` |
+
 ---
 
 ## 3. Tipografi

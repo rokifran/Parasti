@@ -4,11 +4,13 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { Task } from '../types';
+import type { Task, TaskPriority } from '../types';
+import { todayIn, addDays } from '../../server/shared/tasks';
 import { useConfig } from '../contexts/ConfigContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TaskEditModal } from './TaskEditModal';
+import { LabelChip } from './LabelChip';
 import { CheckIcon, CheckSquareIcon, LoaderIcon, PlusIcon, TrashIcon } from './Icons';
 
 type Tab = 'overdue' | 'today' | 'upcoming' | 'done';
@@ -27,6 +29,7 @@ function ymdIn(timeZone: string): string {
 export function TasksPage() {
   const { t, language } = useLanguage();
   const { config } = useConfig();
+  const tomorrow = addDays(todayIn(config.timezone), 1);
   const [tab, setTab] = useState<Tab>('today');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +38,7 @@ export function TasksPage() {
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState(() => ymdIn(config.timezone));
   const [dueTime, setDueTime] = useState('');
+  const [priority, setPriority] = useState<TaskPriority>('normal');
   const [adding, setAdding] = useState(false);
 
   const [editing, setEditing] = useState<Task | null>(null);
@@ -76,6 +80,7 @@ export function TasksPage() {
         title: title.trim(),
         due_date: dueDate,
         due_time: dueTime || null,
+        priority,
       });
       setTitle('');
       setDueTime('');
@@ -166,6 +171,15 @@ export function TasksPage() {
           onChange={e => setDueTime(e.target.value)}
           aria-label={t('tasks.timeOptional')}
         />
+        <select
+          value={priority}
+          onChange={e => setPriority(e.target.value as TaskPriority)}
+          aria-label={t('tasks.priority')}
+        >
+          <option value="high">{t('tasks.priorityHigh')}</option>
+          <option value="normal">{t('tasks.priorityNormal')}</option>
+          <option value="low">{t('tasks.priorityLow')}</option>
+        </select>
         <button type="submit" className="tasks-add-btn" disabled={adding}>
           {adding ? <LoaderIcon size={14} /> : <PlusIcon size={14} />}
           {t('tasks.add')}
@@ -183,7 +197,10 @@ export function TasksPage() {
           {tasks.map(task => {
             const isDone = task.status === 'done';
             return (
-              <li key={task.id} className={`tasks-row ${isDone ? 'tasks-row--done' : ''} tasks-row--${task.bucket}`}>
+              <li
+                key={task.id}
+                className={`tasks-row ${isDone ? 'tasks-row--done' : ''} tasks-row--${task.bucket}${!isDone && task.due_date === tomorrow && task.bucket === 'upcoming' ? ' tasks-row--h1' : ''}`}
+              >
                 <button
                   type="button"
                   className={`tasks-check ${isDone ? 'tasks-check--done' : ''}`}
@@ -203,7 +220,7 @@ export function TasksPage() {
                   {task.title}
                 </button>
                 {task.labels?.map(l => (
-                  <span key={l.id} className="label-chip label-chip--static">{l.name}</span>
+                  <LabelChip key={l.id} label={l} />
                 ))}
                 <span className="tasks-row-date">{formatDue(task)}</span>
                 <button

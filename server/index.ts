@@ -30,7 +30,7 @@ import { parseMarkdownToBlocks, blocksToMarkdown } from './shared/markdown';
 import { serializeBlockProps } from './shared/blockProps';
 import { validateEventInput, validateEventRange } from './shared/events';
 import { parseFeatures } from './shared/features';
-import { validateLabelName, extractLabelIds } from './shared/labels';
+import { validateLabelName, extractLabelIds, validateLabelColor, LABEL_COLORS } from './shared/labels';
 import {
   validateTaskInput,
   todayIn,
@@ -873,7 +873,7 @@ app.get('/api/pages/:id', (req, res) => {
     'SELECT * FROM blocks WHERE page_id = ? ORDER BY position ASC'
   ).all(id).map(b => normalizeBlock(b as Row));
   const labels = db.prepare(
-    `SELECT l.id, l.name FROM page_labels pl
+    `SELECT l.id, l.name, l.color FROM page_labels pl
        JOIN labels l ON l.id = pl.label_id
        WHERE pl.page_id = ? AND l.owner_user_id = ?`
   ).all(id, user.id);
@@ -934,7 +934,7 @@ app.put('/api/pages/:id', (req, res) => {
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(id);
   if (labelIds !== undefined) replacePageLabels(id, labelIds);
   const labels = db.prepare(
-    `SELECT l.id, l.name FROM page_labels pl
+    `SELECT l.id, l.name, l.color FROM page_labels pl
        JOIN labels l ON l.id = pl.label_id
        WHERE pl.page_id = ? AND l.owner_user_id = ?`
   ).all(id, user.id);
@@ -1488,36 +1488,36 @@ function labelsOwnedBy(ids: string[], userId: string): boolean {
   return (row?.n ?? 0) === ids.length;
 }
 
-function taskLabelsMap(taskIds: string[]): Map<string, { id: string; name: string }[]> {
-  const map = new Map<string, { id: string; name: string }[]>();
+function taskLabelsMap(taskIds: string[]): Map<string, { id: string; name: string; color: string | null }[]> {
+  const map = new Map<string, { id: string; name: string; color: string | null }[]>();
   for (let i = 0; i < taskIds.length; i += 50) {
     const slice = taskIds.slice(i, i + 50);
     const rows: any[] = db.prepare(
-      `SELECT tl.task_id AS item_id, l.id, l.name FROM task_labels tl
+      `SELECT tl.task_id AS item_id, l.id, l.name, l.color FROM task_labels tl
          JOIN labels l ON l.id = tl.label_id
          WHERE tl.task_id IN (${slice.map(() => '?').join(',')})`
     ).all(...slice);
     for (const row of rows) {
       const list = map.get(row.item_id) ?? [];
-      list.push({ id: row.id, name: row.name });
+      list.push({ id: row.id, name: row.name, color: row.color ?? null });
       map.set(row.item_id, list);
     }
   }
   return map;
 }
 
-function eventLabelsMap(eventIds: string[]): Map<string, { id: string; name: string }[]> {
-  const map = new Map<string, { id: string; name: string }[]>();
+function eventLabelsMap(eventIds: string[]): Map<string, { id: string; name: string; color: string | null }[]> {
+  const map = new Map<string, { id: string; name: string; color: string | null }[]>();
   for (let i = 0; i < eventIds.length; i += 50) {
     const slice = eventIds.slice(i, i + 50);
     const rows: any[] = db.prepare(
-      `SELECT el.event_id AS item_id, l.id, l.name FROM event_labels el
+      `SELECT el.event_id AS item_id, l.id, l.name, l.color FROM event_labels el
          JOIN labels l ON l.id = el.label_id
          WHERE el.event_id IN (${slice.map(() => '?').join(',')})`
     ).all(...slice);
     for (const row of rows) {
       const list = map.get(row.item_id) ?? [];
-      list.push({ id: row.id, name: row.name });
+      list.push({ id: row.id, name: row.name, color: row.color ?? null });
       map.set(row.item_id, list);
     }
   }
@@ -1551,7 +1551,7 @@ function replacePageLabels(pageId: string, labelIds: string[]): void {
 app.get('/api/labels', (req, res) => {
   const user = res.locals.user;
   const labels = db.prepare(
-    'SELECT id, name FROM labels WHERE owner_user_id = ? ORDER BY name COLLATE NOCASE ASC'
+    'SELECT id, name, color FROM labels WHERE owner_user_id = ? ORDER BY name COLLATE NOCASE ASC'
   ).all(user.id);
   res.json({ labels });
 });
@@ -1560,6 +1560,8 @@ app.post('/api/labels', (req, res) => {
   const body = req.body || {};
   const v = validateLabelName(body.name);
   if ('error' in v) return res.status(400).json({ error: v.error });
+  const cv = validateLabelColor(body.color ?? null);
+  if ('error' in cv) return res.status(400).json({ error: cv.error });
 
   const user = res.locals.user;
   const duplicate = db.prepare(
@@ -1568,16 +1570,16 @@ app.post('/api/labels', (req, res) => {
   if (duplicate) return res.status(409).json({ error: 'Label already exists' });
 
   const id = crypto.randomUUID();
-  db.prepare('INSERT INTO labels (id, owner_user_id, name) VALUES (?, ?, ?)')
-    .run(id, user.id, v.value);
-  res.json({ label: { id, name: v.value } });
+  db.prepare('INSERT INTO labels (id, owner_user_id, name, color) VALUES (?, ?, ?, ?)')
+    .run(id, user.id, v.value, cv.value);
+  res.json({ label: { id, name: v.value, color: cv.value } });
 });
 
 app.patch('/api/labels/:id', (req, res) => {
   const id = req.params.id;
   const user = res.locals.user;
-  const existing = db.prepare(
-    'SELECT id FROM labels WHERE id = ? AND owner_user_id = ?'
+  const existing: any = db.prepare(
+    'SELECT id, name, color FROM labels WHERE id = ? AND owner_user_id = ?'
   ).get(id, user.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
@@ -1586,12 +1588,19 @@ app.patch('/api/labels/:id', (req, res) => {
   if ('error' in v) return res.status(400).json({ error: v.error });
 
   const duplicate = db.prepare(
-    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE'
-  ).get(user.id, v.value);
+    'SELECT id FROM labels WHERE owner_user_id = ? AND name = ? COLLATE NOCASE AND id != ?'
+  ).get(user.id, v.value, id);
   if (duplicate) return res.status(409).json({ error: 'Label already exists' });
 
-  db.prepare('UPDATE labels SET name = ? WHERE id = ?').run(v.value, id);
-  res.json({ label: { id, name: v.value } });
+  let newColor: string | null = existing.color ?? null;
+  if (body.color !== undefined) {
+    const cv = validateLabelColor(body.color);
+    if ('error' in cv) return res.status(400).json({ error: cv.error });
+    newColor = cv.value;
+  }
+
+  db.prepare('UPDATE labels SET name = ?, color = ? WHERE id = ?').run(v.value, newColor, id);
+  res.json({ label: { id, name: v.value, color: newColor } });
 });
 
 app.delete('/api/labels/:id', (req, res) => {
@@ -1610,7 +1619,7 @@ app.get('/api/labels/:id/items', (req, res) => {
   const id = req.params.id;
   const user = res.locals.user;
   const label: any = db.prepare(
-    'SELECT id, name FROM labels WHERE id = ? AND owner_user_id = ?'
+    'SELECT id, name, color FROM labels WHERE id = ? AND owner_user_id = ?'
   ).get(id, user.id);
   if (!label) return res.status(404).json({ error: 'Not found' });
 

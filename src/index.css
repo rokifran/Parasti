@@ -241,6 +241,51 @@ body {
   background: var(--bg-hover);
 }
 
+.page-icon-btn--empty {
+  width: 40px;
+  height: 40px;
+  margin-top: 8px;
+  justify-content: center;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+}
+
+.page-icon-btn--empty:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  background: transparent;
+}
+
+.new-page-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.new-page-icon-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.new-page-icon-btn--set {
+  font-size: 22px;
+}
+
+.new-page-icon-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
 .page-title {
   font-size: 40px;
   font-weight: 700;

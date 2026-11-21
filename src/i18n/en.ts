@@ -78,7 +78,10 @@ export const en = {
   'page.newSubpage': 'New subpage',
   'page.share': 'Share page',
   'page.titlePlaceholder': 'Untitled',
+  'page.titleLabel': 'Title',
   'page.changeIcon': 'Change icon',
+  'page.addIcon': 'Add icon',
+  'page.createError': 'Failed to create page',
   'page.delete': 'Delete page',
   'page.addBlock': 'Type something or press / for commands',
   'page.addBlockBelow': 'Type something',
@@ -104,6 +107,7 @@ export const en = {
   // Common
   'common.loading': 'Loading…',
   'common.cancel': 'Cancel',
+  'common.create': 'Create',
   'common.save': 'Save',
   'common.errorImport': 'Error importing',
   'common.errorGeneric': 'Unknown error',

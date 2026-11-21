@@ -17,7 +17,7 @@ export interface PageContextType {
   loading: boolean;
   currentPageId: string | null;
   setCurrentPageId: (id: string | null) => void;
-  createPage: (parentId?: string | null) => Promise<Page>;
+  createPage: (parentId?: string | null, data?: { title?: string; icon?: string }) => Promise<Page>;
   updatePage: (id: string, data: Partial<Page>) => Promise<void>;
   // Moves the page and its subpages to Trash (reversible with restorePage).
   deletePage: (id: string) => Promise<void>;
@@ -113,8 +113,11 @@ export function PageProvider({ children }: { children: ReactNode }) {
     });
   }, [loaded]);
 
-  const createPage = async (parentId?: string | null) => {
-    const res = await api.pages.create({ parent_id: parentId });
+  const createPage = async (
+    parentId?: string | null,
+    data?: { title?: string; icon?: string }
+  ) => {
+    const res = await api.pages.create({ parent_id: parentId, ...data });
     setPages(prev => [...prev, res.page]);
     navigate(`/page/${res.page.id}`);
     return res.page;

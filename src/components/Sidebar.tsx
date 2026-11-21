@@ -38,6 +38,7 @@ import { AdminUsersModal } from './AdminUsersModal';
 import { ImportModal } from './ImportModal';
 import { LabelCreateModal } from './LabelCreateModal';
 import { LabelEditModal } from './LabelEditModal';
+import { NewPageModal, NewPageRequest } from './NewPageModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { TrashModal } from './TrashModal';
@@ -141,9 +142,10 @@ type PageTreeItemProps = {
   page: Page;
   level?: number;
   collapsed: boolean;
+  onCreateChild: (parentId: string) => void;
 };
 
-const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed }: PageTreeItemProps) {
+const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed, onCreateChild }: PageTreeItemProps) {
   const { id: currentId } = useParams();
   const isParentOfActive = hasDescendant(page, currentId);
   const [manuallyExpanded, setManuallyExpanded] = React.useState<boolean | null>(null);
@@ -157,7 +159,7 @@ const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed }: 
   }, [isParentOfActive, currentId]);
 
   const navigate = useNavigate();
-  const { deletePage, createPage, refreshPages, updatePage, duplicatePage, toggleFavorite, pages: flatPages } = usePageContext();
+  const { deletePage, updatePage, duplicatePage, toggleFavorite, pages: flatPages } = usePageContext();
   const { t } = useLanguage();
   const { state: dragState, setState: setDragState } = useDragState();
 
@@ -243,26 +245,11 @@ const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed }: 
     },
   ];
 
-  const handleAddChild = useCallback(async (e: React.MouseEvent) => {
+  const handleAddChild = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setManuallyExpanded(true);
-    try {
-      const newPage = await createPage(page.id);
-      try {
-        await api.blocks.create(page.id, {
-          type: 'subpage',
-          content: newPage.id,
-          position: 999_999,
-        });
-      } catch (e) {
-        console.error('Failed to insert inline subpage block', e);
-      }
-      await refreshPages();
-      navigate(`/page/${newPage.id}`);
-    } catch (e) {
-      console.error('Failed to create subpage', e);
-    }
-  }, [createPage, navigate, page.id, refreshPages]);
+    onCreateChild(page.id);
+  }, [onCreateChild, page.id]);
 
   // Drag handlers -----------------------------------------------------------
 
@@ -474,7 +461,7 @@ const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed }: 
       {expanded && hasChildren && (
         <div className="page-children">
           {page.children!.map(child => (
-            <PageTreeItem key={child.id} page={child} level={level + 1} collapsed={collapsed} />
+            <PageTreeItem key={child.id} page={child} level={level + 1} collapsed={collapsed} onCreateChild={onCreateChild} />
           ))}
         </div>
       )}
@@ -492,7 +479,7 @@ const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed }: 
 });
 
 export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
-  const { pages, createPage, updatePage, refreshPages } = usePageContext();
+  const { pages, updatePage, refreshPages } = usePageContext();
   const { workspace } = useWorkspace();
   const tree = useMemo(() => buildPageTree(pages), [pages]);
   const { user } = useAuth();
@@ -511,6 +498,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   const [editingLabel, setEditingLabel] = useState<Label | null>(null);
   const [deletingLabel, setDeletingLabel] = useState<Label | null>(null);
   const [removingLabel, setRemovingLabel] = useState(false);
+  const [newPageRequest, setNewPageRequest] = useState<NewPageRequest | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const workspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const userAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -615,27 +603,18 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   }, [location.pathname]);
 
   // Create new project.
-  const handleCreateProject = useCallback(async () => {
-    try {
-      const newPage = await createPage(null);
-      await updatePage(newPage.id, { icon: '', title: 'New Project', is_project: true });
-      await refreshPages();
-      navigate(`/page/${newPage.id}`);
-    } catch (err) {
-      console.error('Create project error:', err);
-    }
-  }, [createPage, updatePage, refreshPages, navigate]);
+  const handleCreateProject = useCallback(() => {
+    setNewPageRequest({ kind: 'project' });
+  }, []);
 
   // Create new private page.
-  const handleCreatePrivatePage = useCallback(async () => {
-    try {
-      const newPage = await createPage(null);
-      await refreshPages();
-      navigate(`/page/${newPage.id}`);
-    } catch (err) {
-      console.error('Create page error:', err);
-    }
-  }, [createPage, refreshPages, navigate]);
+  const handleCreatePrivatePage = useCallback(() => {
+    setNewPageRequest({ kind: 'page', parentId: null });
+  }, []);
+
+  const openCreateChild = useCallback((parentId: string) => {
+    setNewPageRequest({ kind: 'page', parentId, insertSubpageBlock: true });
+  }, []);
 
   const removeLabel = async () => {
     if (!deletingLabel) return;
@@ -857,7 +836,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   onDrop={() => handleRootDrop(projectTree)}
                 >
                   {projectTree.map((page) => (
-                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} />
+                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} />
                   ))}
                 </div>
               )}
@@ -891,7 +870,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   onDrop={() => handleRootDrop(privateTree)}
                 >
                   {privateTree.map((page) => (
-                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} />
+                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} />
                   ))}
                 </div>
               )}
@@ -962,7 +941,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           {collapsed && (
             <div className="sidebar-collapsed-tree">
               {tree.map((page) => (
-                <PageTreeItem key={page.id} page={page} collapsed={collapsed} />
+                <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} />
               ))}
             </div>
           )}
@@ -1180,6 +1159,11 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
       <LabelEditModal
         label={editingLabel}
         onClose={() => setEditingLabel(null)}
+      />
+
+      <NewPageModal
+        request={newPageRequest}
+        onClose={() => setNewPageRequest(null)}
       />
 
       <ConfirmDialog

@@ -4,11 +4,13 @@ import { PlusIcon, DownloadIcon } from './Icons';
 import { Logo } from './Logo';
 import { useLanguage } from '../i18n/LanguageContext';
 import { ImportModal } from './ImportModal';
+import { NewPageModal } from './NewPageModal';
 
 export function EmptyState() {
-  const { createPage, refreshPages } = usePageContext();
+  const { refreshPages } = usePageContext();
   const { t } = useLanguage();
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [newPageOpen, setNewPageOpen] = useState(false);
 
   return (
     <div className="empty-state">
@@ -18,7 +20,7 @@ export function EmptyState() {
         <p>{t('empty.subtitle')}</p>
       </div>
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button className="empty-state-btn" onClick={() => createPage(null)}>
+        <button className="empty-state-btn" onClick={() => setNewPageOpen(true)}>
           <PlusIcon size={15} />
           <span>{t('empty.cta')}</span>
         </button>
@@ -37,6 +39,11 @@ export function EmptyState() {
         onImported={async () => {
           await refreshPages();
         }}
+      />
+
+      <NewPageModal
+        request={newPageOpen ? { kind: 'page', parentId: null } : null}
+        onClose={() => setNewPageOpen(false)}
       />
     </div>
   );

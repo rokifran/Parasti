@@ -79,7 +79,10 @@ export const es: Record<TranslationKey, string> = {
   'page.newSubpage': 'Nueva subpágina',
   'page.share': 'Compartir página',
   'page.titlePlaceholder': 'Sin título',
+  'page.titleLabel': 'Título',
   'page.changeIcon': 'Cambiar icono',
+  'page.addIcon': 'Añadir icono',
+  'page.createError': 'No se pudo crear la página',
   'page.delete': 'Eliminar página',
   'page.addBlock': 'Escribe algo o pulsa / para comandos',
   'page.addBlockBelow': 'Escribe algo',
@@ -105,6 +108,7 @@ export const es: Record<TranslationKey, string> = {
   // Common
   'common.loading': 'Cargando…',
   'common.cancel': 'Cancelar',
+  'common.create': 'Crear',
   'common.save': 'Guardar',
   'common.errorImport': 'Error al importar',
   'common.errorGeneric': 'Error desconocido',

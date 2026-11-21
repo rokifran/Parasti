@@ -27,9 +27,10 @@ interface IconPickerProps {
   onSelect: (emoji: string) => void;
   onRemove?: () => void;
   anchorRect?: DOMRect | null;
+  zIndex?: number;
 }
 
-export function IconPicker({ open, onClose, onSelect, onRemove, anchorRect }: IconPickerProps) {
+export function IconPicker({ open, onClose, onSelect, onRemove, anchorRect, zIndex = 1000 }: IconPickerProps) {
   const [activeTab, setActiveTab] = useState(0);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +82,7 @@ export function IconPicker({ open, onClose, onSelect, onRemove, anchorRect }: Ic
         position: 'fixed',
         top: `${top}px`,
         left: `${left}px`,
-        zIndex: 1000,
+        zIndex,
       }}
       role="dialog"
       aria-label="Select icon"

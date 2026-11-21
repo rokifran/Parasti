@@ -9,6 +9,7 @@ import { StarIcon, StarFilledIcon, FullWidthIcon, RestoreIcon } from './PageIcon
 import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
 import { LabelChip } from './LabelChip';
+import { NewPageModal } from './NewPageModal';
 import { ReadOnlyBlock } from './ReadOnlyBlock';
 import { SharePopover } from './SharePopover';
 import { CoverBanner } from './CoverBanner';
@@ -28,11 +29,9 @@ export function PageView() {
   const [loading, setLoading] = useState(true);
   const {
     pages,
-    createPage,
     updatePage,
     setCurrentPageId,
     getPageBreadcrumbs,
-    refreshPages,
     toggleFavorite,
     restorePage,
   } = usePageContext();
@@ -50,6 +49,7 @@ export function PageView() {
   const iconBtnRef = useRef<HTMLButtonElement | null>(null);
   const [iconAnchor, setIconAnchor] = useState<DOMRect | null>(null);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [newSubpageOpen, setNewSubpageOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -228,23 +228,8 @@ export function PageView() {
     }
   };
 
-  const handleCreateSubpage = async () => {
-    try {
-      const newPage = await createPage(id);
-      await refreshPages();
-      try {
-        await api.blocks.create(id, {
-          type: 'subpage',
-          content: newPage.id,
-          position: 999_999,
-        });
-      } catch (e) {
-        console.error('Failed to insert inline subpage block', e);
-      }
-      navigate(`/page/${newPage.id}`);
-    } catch (err) {
-      console.error('Error creating subpage', err);
-    }
+  const handleCreateSubpage = () => {
+    setNewSubpageOpen(true);
   };
 
   return (
@@ -355,27 +340,31 @@ export function PageView() {
         anchorRect={shareAnchor}
       />
 
+      <NewPageModal
+        request={newSubpageOpen ? { kind: 'page', parentId: id, insertSubpageBlock: true } : null}
+        onClose={() => setNewSubpageOpen(false)}
+      />
+
       <div className={`page-header ${hasCover ? 'page-header--with-cover' : ''}`}>
-        {page.icon && (
+        {(page.icon || !isTrashed) && (
           <button
             ref={iconBtnRef}
-            className={`page-icon-btn ${hasCover ? 'page-icon-btn--cover-overlap' : ''}`}
+            className={`page-icon-btn ${hasCover ? 'page-icon-btn--cover-overlap' : ''}${page.icon ? '' : ' page-icon-btn--empty'}`}
             onClick={handleOpenIconPicker}
-            title="Change or remove icon"
+            title={page.icon ? t('page.changeIcon') : t('page.addIcon')}
+            aria-label={page.icon ? t('page.changeIcon') : t('page.addIcon')}
           >
-            {page.icon}
+            {page.icon || <PlusIcon size={16} />}
           </button>
         )}
 
-        {page.icon && (
-          <IconPicker
-            open={iconPickerOpen}
-            onClose={() => setIconPickerOpen(false)}
-            onSelect={handleSelectIcon}
-            onRemove={handleRemoveIcon}
-            anchorRect={iconAnchor}
-          />
-        )}
+        <IconPicker
+          open={iconPickerOpen}
+          onClose={() => setIconPickerOpen(false)}
+          onSelect={handleSelectIcon}
+          onRemove={page.icon ? handleRemoveIcon : undefined}
+          anchorRect={iconAnchor}
+        />
 
         <div className="page-labels-row">
           {(page.labels ?? []).map(l => (

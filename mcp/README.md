@@ -9,8 +9,9 @@ It allows any LLM or AI agent to:
 - Search across existing pages and blocks in Parasti.
 - Inspect page details and ordered blocks by page ID.
 - Upload local images into a page at a chosen position.
+- Manage your personal tasks: see what is overdue and due today, create tasks with due dates, reschedule, reopen, cancel, complete, or delete them.
 
-Beyond pages, this server can also write your calendar, create projects, and place images: it creates, lists, updates, and deletes events, builds project roots with nested sub-pages, and inserts image blocks after a given block or at a given index.
+Beyond pages, this server can also write your calendar, create projects, place images, and manage your tasks: it creates, lists, updates, and deletes events, builds project roots with nested sub-pages, inserts image blocks after a given block or at a given index, and keeps your task list up to date.
 
 ---
 
@@ -52,8 +53,11 @@ sharing one username and password.
 | `update_event` | `eventId` *(string, required)*<br>`title` *(string, required)*<br>`event_date` *(string, required, `YYYY-MM-DD`)*<br>`start_time` *(string, optional, `HH:MM`)*<br>`end_time` *(string, optional, `HH:MM`)* | Replaces an event. All fields must be supplied; this is not a partial update. |
 | `delete_event` | `eventId` *(string, required)* | Permanently deletes an event. Destructive: only call after the user confirms. |
 | `list_tasks` | `due` *(string, optional: `overdue` \| `today` \| `upcoming` \| `actionable` \| `all`, default `actionable`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled` \| `all`)* | Lists tasks. `actionable` means overdue + today; "today" follows the institution timezone. |
-| `create_task` | `title` *(string, required)*<br>`due_date` *(string, required, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)* | Creates a task. Omit `due_time` for an all-day task. |
+| `create_task` | `title` *(string, required)*<br>`due_date` *(string, required, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)*<br>`pageId` *(string, optional)* | Creates a task. Omit `due_time` for an all-day task. Optionally links it to a page you own. |
 | `complete_task` | `id` *(string, required)* | Marks a task as done. |
+| `update_task` | `id` *(string, required)*<br>`title` *(string, optional)*<br>`due_date` *(string, optional, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled`)*<br>`pageId` *(string, optional)* | Partial update: renames, reschedules, reopens, cancels, or links/unlinks a page. Empty `due_time` clears the time; empty `pageId` unlinks. Only passed fields change. |
+| `delete_task` | `id` *(string, required)* | Permanently deletes a task. Destructive: only call after the user confirms. |
+| `get_config` | *(none)* | Reads the instance configuration: enabled modules (`features`), the institution timezone that decides "today", and whether Google sync is configured. Public — no token needed. |
 | `create_project` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)* | Creates a root page flagged as a project. |
 | `list_projects` | *(none)* | Lists projects (root pages with `is_project`). |
 | `create_page` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)*<br>`parentId` *(string, optional)* | Creates an empty page, optionally nested under a project or private page. |
@@ -67,10 +71,16 @@ sharing one username and password.
 - "Tugas apa yang sudah terlambat?"
 - "Buat tugas 'Kirim laporan' untuk besok."
 - "Tandai tugas <id> sebagai selesai."
+- "Buka kembali tugas <id> yang tadi kuselesaikan."
+- "Geser tenggat tugas <id> ke Jumat depan."
+- "Hapus tugas <id>."
+- "Fitur apa saja yang aktif di instansi Parasti-ku?"
 
 The agent reads tasks through `list_tasks`; overdue and today are decided by
 the server's `TIMEZONE`, so asking on a phone in another timezone still matches
-the institution's calendar.
+the institution's calendar. `get_config` tells the agent which modules are
+active and that timezone — so when a module is disabled (`FEATURES=none`), it
+can explain why the task tools return 404 instead of showing a raw error.
 
 ---
 

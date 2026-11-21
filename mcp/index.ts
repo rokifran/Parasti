@@ -205,7 +205,7 @@ function positionBetween(prev?: number, next?: number): number {
 // Create MCP server instance
 const server = new McpServer({
   name: 'parasti-mcp',
-  version: '1.0.0',
+  version: '1.1.0',
 });
 
 // Tool: import_markdown
@@ -615,8 +615,9 @@ server.tool(
     title: z.string().describe('Task title, 1-200 characters'),
     due_date: z.string().describe('Due date in YYYY-MM-DD format'),
     due_time: z.string().optional().describe('Optional time in HH:MM (24h). Omit for an all-day task.'),
+    pageId: z.string().optional().describe('Optional page ID to link the task to. The page must belong to the token owner (run list_pages to get IDs). Omit for an unlinked task.'),
   },
-  async ({ title, due_date, due_time }) => {
+  async ({ title, due_date, due_time, pageId }) => {
     try {
       const res = await apiRequest<{ task: any }>('/api/tasks', {
         method: 'POST',
@@ -624,22 +625,27 @@ server.tool(
           title,
           due_date,
           due_time: due_time?.trim() || null,
+          page_id: pageId?.trim() || null,
         }),
       });
       const task = res.task;
       const time = task.due_time ? ` at ${task.due_time}` : '';
+      const linked = task.page_id ? `, linked to page ${task.page_id}` : '';
       return {
         content: [
           {
             type: 'text',
-            text: `Created task "${task.title}" due ${task.due_date}${time} (ID: ${task.id})`,
+            text: `Created task "${task.title}" due ${task.due_date}${time}${linked} (ID: ${task.id})`,
           },
         ],
       };
     } catch (err: any) {
+      const hint = err.message.includes('Page not found')
+        ? '. The pageId was not found or is not yours: run list_pages to get valid IDs.'
+        : '';
       return {
         isError: true,
-        content: [{ type: 'text', text: `Failed to create task: ${err.message}` }],
+        content: [{ type: 'text', text: `Failed to create task: ${err.message}${hint}` }],
       };
     }
   }
@@ -670,6 +676,123 @@ server.tool(
       return {
         isError: true,
         content: [{ type: 'text', text: `Failed to complete task: ${err.message}` }],
+      };
+    }
+  }
+);
+
+// Tool: update_task
+server.tool(
+  'update_task',
+  'Update a Parasti task: rename it, reschedule it, reopen it, cancel it, or link/unlink a page. Partial update: only the fields you pass are changed.',
+  {
+    id: z.string().describe('ID of the task to update'),
+    title: z.string().optional().describe('New title, 1-200 characters. Omit to keep the current one.'),
+    due_date: z.string().optional().describe('New due date in YYYY-MM-DD format. Omit to keep the current one.'),
+    due_time: z.string().optional().describe('New time in HH:MM (24h). Pass an empty string to clear the time (all-day task). Omit to keep the current one.'),
+    status: z.enum(['open', 'done', 'cancelled']).optional().describe("New status. 'open' reopens a done or cancelled task, 'cancelled' abandons it. Omit to keep the current one."),
+    pageId: z.string().optional().describe('Page ID to link the task to (must belong to the token owner). Pass an empty string to unlink. Omit to keep the current link.'),
+  },
+  async ({ id, title, due_date, due_time, status, pageId }) => {
+    try {
+      const body: Record<string, unknown> = {};
+      if (title !== undefined) body.title = title;
+      if (due_date !== undefined) body.due_date = due_date;
+      // An empty string explicitly clears the time; the server treats it as null.
+      if (due_time !== undefined) body.due_time = due_time === '' ? null : due_time;
+      if (status !== undefined) body.status = status;
+      if (pageId !== undefined) body.page_id = pageId === '' ? null : pageId;
+
+      if (Object.keys(body).length === 0) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'Nothing to update: pass at least one of title, due_date, due_time, status, pageId.',
+            },
+          ],
+        };
+      }
+
+      const res = await apiRequest<{ task: any }>(`/api/tasks/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      const task = res.task;
+      const time = task.due_time ? ` at ${task.due_time}` : '';
+      const linked = task.page_id ? `, linked to page ${task.page_id}` : ', unlinked';
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Updated task "${task.title}" (ID: ${task.id}): due ${task.due_date}${time}, status ${task.status}${linked}`,
+          },
+        ],
+      };
+    } catch (err: any) {
+      const hint = err.message.includes('Page not found')
+        ? '. The pageId was not found or is not yours: run list_pages to get valid IDs.'
+        : '';
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to update task: ${err.message}${hint}` }],
+      };
+    }
+  }
+);
+
+// Tool: delete_task
+server.tool(
+  'delete_task',
+  'Delete a task permanently. DESTRUKTIF dan permanen. Hanya panggil setelah user mengkonfirmasi.',
+  {
+    id: z.string().describe('ID of the task to delete'),
+  },
+  async ({ id }) => {
+    try {
+      const res = await apiRequest<{ success: boolean }>(`/api/tasks/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Deleted task ${id}. Response: ${JSON.stringify(res)}`,
+          },
+        ],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to delete task: ${err.message}` }],
+      };
+    }
+  }
+);
+
+// Tool: get_config
+// GET /api/config is public (the client reads it before login), so this call
+// works without a valid token too — which is exactly what makes it useful for
+// diagnosing an instance that disabled a module (e.g. FEATURES=none).
+server.tool(
+  'get_config',
+  'Read the Parasti instance configuration: which modules are enabled (features), the institution timezone that decides "today" for tasks, and whether Google sync is configured. No authentication required.',
+  {},
+  async () => {
+    try {
+      const res = await fetch(`${config.url}/api/config`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      }
+      const data = await res.json();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+      };
+    } catch (err: any) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to read config: ${err.message}` }],
       };
     }
   }

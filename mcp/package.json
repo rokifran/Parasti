@@ -1,7 +1,7 @@
 {
   "name": "parasti-mcp",
-  "version": "1.1.0",
-  "description": "Official MCP (Model Context Protocol) server for Parasti: import Markdown pages, search, calendar events, projects, tasks, and image uploads from any AI assistant.",
+  "version": "1.2.0",
+  "description": "Official MCP (Model Context Protocol) server for Parasti: import Markdown pages, search, calendar events, projects, tasks, labels, and image uploads from any AI assistant.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -19,6 +19,7 @@
     "knowledge-base",
     "calendar",
     "tasks",
+    "labels",
     "ai",
     "llm",
     "claude",

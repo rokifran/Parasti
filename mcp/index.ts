@@ -1026,6 +1026,110 @@ server.tool(
   }
 );
 
+// Tool: move_page
+server.tool(
+  'move_page',
+  'Move a page (with its sub-pages) to a new parent: from the private area into a project, between projects, under another page, or back to the root. Project roots stay at the top level and cannot be moved.',
+  {
+    pageId: z.string().describe('ID of the page to move'),
+    parentId: z.string().optional().describe('Destination parent page or project ID. Pass an empty string to move the page back to the root (private area). Omit to keep the current parent.'),
+    position: z.number().int().min(0).optional().describe('Position among the destination siblings. Omit to keep the current position.'),
+  },
+  async ({ pageId, parentId, position }) => {
+    try {
+      let pageRes: { page: any };
+      try {
+        pageRes = await apiRequest<{ page: any }>(`/api/pages/${encodeURIComponent(pageId)}`);
+      } catch {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'Page ID tidak ditemukan. Jalankan list_pages dulu untuk mengambil ID yang benar.',
+            },
+          ],
+        };
+      }
+      const currentPage = pageRes.page;
+
+      // Mirrors the app: project roots stay in the Projects section, so the
+      // move tool refuses to nest them under another page.
+      if (currentPage.is_project && !currentPage.parent_id) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'Project roots stay at the top level and cannot be moved. Move its sub-pages instead.',
+            },
+          ],
+        };
+      }
+
+      // An empty string explicitly sends parent_id = null, i.e. back to the root.
+      const parent = parentId === undefined ? undefined : parentId.trim() || null;
+      let parentTitle: string | null = null;
+      if (parent) {
+        try {
+          const parentRes = await apiRequest<{ page: any }>(`/api/pages/${encodeURIComponent(parent)}`);
+          parentTitle = parentRes.page?.title ?? null;
+        } catch {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: 'Parent page ID tidak ditemukan. Jalankan list_pages atau list_projects dulu untuk mengambil ID yang benar.',
+              },
+            ],
+          };
+        }
+      }
+
+      const body: Record<string, unknown> = {};
+      if (parent !== undefined) body.parent_id = parent;
+      if (position !== undefined) body.position = position;
+      if (Object.keys(body).length === 0) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'Nothing to move: pass parentId (empty string = root/private area) and/or position.',
+            },
+          ],
+        };
+      }
+
+      const res = await apiRequest<{ page: any }>(`/api/pages/${encodeURIComponent(pageId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      const moved = res.page;
+      const destination = moved.parent_id
+        ? `under "${parentTitle || moved.parent_id}"`
+        : 'to the root (private area)';
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Moved page "${moved.title}" (ID: ${moved.id}) ${destination}.\nView at: ${config.url}/page/${moved.id}`,
+          },
+        ],
+      };
+    } catch (err: any) {
+      const hint = err.message.includes('Invalid parent')
+        ? '. The parentId is not yours, is trashed, or would create a cycle: run list_pages to get valid IDs.'
+        : '';
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Failed to move page: ${err.message}${hint}` }],
+      };
+    }
+  }
+);
+
 // Tool: upload_image
 server.tool(
   'upload_image',

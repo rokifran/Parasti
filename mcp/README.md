@@ -8,6 +8,7 @@ It allows any LLM or AI agent to:
 - Query the workspace page hierarchy and retrieve page identifiers (`parentId`).
 - Search across existing pages and blocks in Parasti.
 - Inspect page details and ordered blocks by page ID.
+- Move a page between projects, nest it under another page, or bring it back to the private/root area.
 - Upload local images into a page at a chosen position.
 - Manage your personal tasks: see what is overdue and due today, create tasks with due dates, reschedule, reopen, cancel, complete, or delete them.
 - Browse labels and everything tagged with them across pages, tasks and events.
@@ -64,6 +65,7 @@ sharing one username and password.
 | `create_project` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)* | Creates a root page flagged as a project. |
 | `list_projects` | *(none)* | Lists projects (root pages with `is_project`). |
 | `create_page` | `title` *(string, required)*<br>`icon` *(string, optional, max 32 chars)*<br>`parentId` *(string, optional)* | Creates an empty page, optionally nested under a project or private page. |
+| `move_page` | `pageId` *(string, required)*<br>`parentId` *(string, optional, empty = root/private area)*<br>`position` *(number, optional)* | Moves a page (with its sub-pages) under a new parent — a project, another page, or back to the root/private area. Project roots stay at the top level; unknown parents and cycles are rejected. |
 | `upload_image` | `filePath` *(string, required)*<br>`pageId` *(string, required)*<br>`afterBlockId` *(string, optional)*<br>`positionIndex` *(number, optional)*<br>`caption` *(string, optional)*<br>`alt` *(string, optional)* | Uploads a local image (png, jpg, gif, webp, svg, bmp, avif; max 25 MB) as an image block. Inserts after a block, before an index, or appends at the end. |
 
 ---

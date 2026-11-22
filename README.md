@@ -13,7 +13,8 @@ A self-hosted, block-based note-taking workspace that runs entirely on **Cloudfl
 </div>
 
 Pages with nested subpages, to-do lists, code blocks, tables, public share links, calendar
-events, image and file uploads, and a bilingual interface (English / Spanish).
+events, tasks, colored labels, image and file uploads, and a bilingual interface
+(English / Spanish).
 
 ---
 
@@ -26,11 +27,19 @@ events, image and file uploads, and a bilingual interface (English / Spanish).
 - **Drag & drop** — move blocks around, nest them by dropping in the middle, and drop an
   image or document straight into the page to upload it.
 - **Public share links** — one click to publish a page (and its subpages) read-only.
-- **Calendar** — an events view with month and year navigation. An event is a date plus
-  optional start/end times (`HH:MM`); events without times are all-day.
+- **Tasks** — a task list with due dates, optional times, status (open / done / cancelled),
+  priorities (high / normal / low), and timezone-aware Today / Overdue / Upcoming buckets.
+- **Labels** — a per-account label list with six preset colors, attachable to pages, tasks
+  and events. Chips are searchable in Ctrl+K, grouped in `/labels/:id`, and editable from
+  the sidebar.
+- **Icons** — choose a page/project icon while creating it, change it from the page header,
+  or add it back after removing it.
+- **Calendar** — a day, month and year events view. An event is a date plus optional
+  start/end times (`HH:MM`); events without times are all-day.
 - **Markdown in and out** — import a `.md` file, export any page back to Markdown.
 - **File storage in R2** — uploads up to 25 MB, never stored in the database.
-- **MCP server** — connect AI assistants (Claude Desktop, Cursor, Zed) to your workspace.
+- **MCP server** — connect AI assistants (Claude Desktop, Cursor, Zed) to your workspace:
+  pages, tasks, events, labels, projects and image uploads.
 - **Bilingual UI** — English and Spanish, switchable at runtime.
 
 ## Contents
@@ -42,7 +51,7 @@ events, image and file uploads, and a bilingual interface (English / Spanish).
 | 3 | [Deploy](#deploy) | Production, staging, and local-only setup |
 | 4 | [Run locally](#run-locally) | Develop on your machine |
 | 5 | [File storage (R2)](#file-storage-r2) | Why uploads aren't in the database |
-| 6 | [Database schema](#database-schema) | Every table, as copy-paste SQL |
+| 6 | [Database schema](#database-schema) | Every migration and table |
 | 7 | [API](#api) | All HTTP routes |
 | 8 | [Configuration](#configuration) | Environment variables |
 | 9 | [Model Context Protocol](#model-context-protocol-mcp) | AI assistant integration |
@@ -75,7 +84,7 @@ You create three things, and they each have a job:
 | What | Cloudflare service | Job in plain language | Created in |
 |---|---|---|---|
 | The website | **Workers** (with static assets) | Serves the app and runs the API. It's the "web host". | `wrangler.jsonc` + [step 1.6](#16-deploy) |
-| Your notes | **D1** | A SQLite database. Holds pages, blocks, share links, and events. | [step 1.2](#12-create-the-database-and-the-bucket) |
+| Your notes | **D1** | A SQLite database. Holds accounts, pages, blocks, tasks, labels, events, share links and API tokens. | [step 1.2](#12-create-the-database-and-the-bucket) |
 | Your images | **R2** | Object storage, like a private folder of files. | [step 1.2](#12-create-the-database-and-the-bucket) |
 
 Two of them are "bindings": you create them separately, then tell the Worker "this
@@ -284,6 +293,7 @@ pnpm run dev:web      # frontend only
 |---|---|
 | `pnpm run dev` | Express + Vite together |
 | `pnpm run build` | type-check and build to `dist/` |
+| `pnpm run typecheck` | type-check only (`tsconfig.server.json`) |
 | `pnpm run db:migrate:all` | apply migrations to the local SQLite file |
 | `pnpm run db:migrate:local` | apply migrations to the local D1 used by `wrangler dev` |
 | `pnpm run db:migrate:prod` | apply migrations to the remote production D1 |
@@ -292,12 +302,15 @@ pnpm run dev:web      # frontend only
 | `pnpm run deploy` | build and deploy the Worker (production) |
 | `pnpm run deploy:staging` | build and deploy the Worker to `env.staging` |
 | `pnpm run mcp` | start the MCP server |
+| `pnpm run mcp:build` | type-check/build the MCP package |
 | `pnpm run mcp:token` | generate an API/MCP token from the CLI |
 | `pnpm run test:mcp` | run the MCP test suite |
 
-> **Upgrading from an older checkout?** Migration files are edited in place and tracked by
-> name in `_migrations_applied`, so a database that was already migrated will **not** pick
-> up schema changes. Delete `data/` and re-run `pnpm run db:migrate:all` to rebuild it.
+> **Upgrading from an older checkout?** Migrations are append-only: never edit an
+> existing `migrations/*.sql` file. The local runner records each file in
+> `_migrations_applied`, and `healSchema()` re-adds missing additive columns/indexes for
+> older local databases. If a local database was created before a migration that changes a
+> table's shape, recreate `data/parasti.db` (local only) and run `pnpm run db:migrate:all`.
 
 ---
 
@@ -327,9 +340,9 @@ and the open internet. Don't turn on `r2.dev`.
 
 ### Already deployed with an older version?
 
-The old schema stored the file bytes in a `data TEXT` column, base64-encoded. Migration
-files are edited in place, so the new shape only lands on a **fresh** database. If you
-already have one, run this once in the D1 Console:
+The old schema stored the file bytes in a `data TEXT` column, base64-encoded. If your
+database was created before the `files` table was split into metadata plus R2, back up D1
+first, then run this once in the D1 Console:
 
 ```sql
 DROP TABLE IF EXISTS files;
@@ -341,6 +354,7 @@ CREATE TABLE files (
   size INTEGER NOT NULL DEFAULT 0,
   storage TEXT NOT NULL DEFAULT 'r2',
   page_id TEXT,
+  owner_user_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE SET NULL
 );
@@ -356,7 +370,7 @@ old table. Re-upload them.
 ## Database schema
 
 All migrations live in `migrations/NNNN_*.sql`, run in filename order, each wrapped in a
-transaction. They are idempotent, so re-running is safe.
+transaction. The runner tracks applied files by name, so re-running the migrator is safe.
 
 | File | Adds |
 |---|---|
@@ -369,7 +383,19 @@ transaction. They are idempotent, so re-running is safe.
 | `0007_block_props.sql` | `blocks.props` — JSON bag for per-block settings (image width / alignment / caption) |
 | `0008_events.sql` | `events` — calendar events: a wall-clock date plus optional `start_time`/`end_time` (`HH:MM`; NULL = all-day), no timezone column on purpose |
 | `0009_users.sql` | `users` — accounts (PBKDF2 hashes) + `owner_user_id` columns on `pages`/`events`/`files` and `user_id` on `api_tokens` (multi-user isolation) |
+| `0010_tasks.sql` | `tasks` — per-account tasks with due date/time, status and an owner index |
+| `0012_prioritas_label.sql` | `tasks.priority` (`high` / `normal` / `low`) + `labels`, `page_labels`, `task_labels`, `event_labels` |
+| `0013_label_colors.sql` | `labels.color` — optional palette key (`terracotta`, `biru`, `olive`, `plum`, `teal`, `cokelat`) |
 
+> `0011` is reserved for the Google Tasks/Calendar sync work and is intentionally not
+> present yet. Migration numbers only guarantee apply order; `0012` can land before `0011`.
+
+> **`0010`, `0012` and `0013` are required before deploying v1.3.x.** `0010` adds the
+> `tasks` table; `0012` adds `tasks.priority` and the three label-relation tables; `0013`
+> adds `labels.color`. A D1 without them fails on `/api/tasks` and `/api/labels` with
+> "no such table" / "no such column". All three are additive — run
+> `pnpm run db:migrate:prod` before `pnpm run deploy`.
+>
 > **`0006` is required before deploying this version.** The API now filters on
 > `pages.deleted_at`, so against a D1 that has not applied it every page request fails with
 > "no such column". Run `pnpm run db:migrate:prod` first. The file is plain `ALTER TABLE`
@@ -415,19 +441,20 @@ prefer.
 Everything is mounted under `/api`. 🔒 routes need a bearer token from
 `POST /api/auth/login`, stored in `localStorage` and sent as `Authorization: Bearer …`.
 👑 routes are admin-only. Data routes are scoped to the signed-in account: another
-user's page, block, event or token answers `404`.
+user's page, block, event, task, label or token answers `404`.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
+| GET | `/api/config` | — | Public module flags (`features`), institution `timezone`, Google configured flag |
 | POST | `/api/auth/login` | — | Get a 24h bearer token (per account) |
 | GET | `/api/auth/me` | 🔒 | Current account profile (`id`, `username`, `displayName`, `isAdmin`) |
 | POST | `/api/auth/password` | 🔒 | Change your own password (`currentPassword`, `newPassword`) |
 | GET | `/api/pages` | 🔒 | List all pages |
-| POST | `/api/pages` | 🔒 | Create a page |
+| POST | `/api/pages` | 🔒 | Create a page (optional `title`, `icon`, `parent_id`) |
 | POST | `/api/pages/import` | 🔒 | Create a page from markdown |
-| GET | `/api/pages/:id` | 🔒 | Page + ordered blocks (404 if trashed, unless `?include_trashed=1`) |
+| GET | `/api/pages/:id` | 🔒 | Page + ordered blocks + labels (404 if trashed, unless `?include_trashed=1`) |
 | GET | `/api/pages/:id/export` | 🔒 | Export page as markdown |
-| PUT | `/api/pages/:id` | 🔒 | Update page (`title`, `icon`, `parent_id`, `position`, `is_favorite`, `full_width`, `is_project`, `cover`) |
+| PUT | `/api/pages/:id` | 🔒 | Update page (`title`, `icon`, `parent_id`, `position`, `is_favorite`, `full_width`, `is_project`, `cover`, `label_ids`) |
 | GET | `/api/pages/trash` | 🔒 | Trashed pages whose parent is not trashed (also purges items older than 30 days) |
 | DELETE | `/api/pages/trash` | 🔒 | Empty the trash (permanent) |
 | DELETE | `/api/pages/:id` | 🔒 | Move page and descendants to Trash (soft delete) |
@@ -441,6 +468,7 @@ user's page, block, event or token answers `404`.
 | PUT | `/api/blocks/reorder` | 🔒 | Batch reorder blocks |
 | POST | `/api/files/upload` | 🔒 | Upload a file (≤ 25 MB, multipart) |
 | GET | `/api/files/:id` | — | Stream a file — public so share pages can render images |
+| GET | `/api/link-preview` | 🔒 | Fetch title, description, image and site metadata for a bookmark URL |
 | GET | `/api/workspace` | 🔒 | Get sidebar name + icon |
 | PUT | `/api/workspace` | 🔒 | Update workspace |
 | POST | `/api/pages/:id/share` | 🔒 | Activate a public share |
@@ -455,11 +483,20 @@ user's page, block, event or token answers `404`.
 | POST | `/api/admin/users` | 🔒👑 | Create an account (`username`, `displayName?`, `password`, `isAdmin?`) |
 | PATCH | `/api/admin/users/:id` | 🔒👑 | Update `displayName`, `isActive`, `isAdmin` (cannot lock yourself out) |
 | POST | `/api/admin/users/:id/reset-password` | 🔒👑 | Reset another account's password |
-| GET | `/api/search` | 🔒 | Search pages and blocks |
+| GET | `/api/search` | 🔒 | Search page titles, block content and label names (labels come first with `match_type: "label"`) |
 | GET | `/api/events` | 🔒 | List events, sorted by date (all-day first within a date); optional `?from=YYYY-MM-DD&to=YYYY-MM-DD` filters the range |
-| POST | `/api/events` | 🔒 | Create an event (`title`, `event_date`, optional `start_time`/`end_time` as `HH:MM`; empty or null times = all day) |
-| PUT | `/api/events/:id` | 🔒 | Update an event (404 if it doesn't exist) |
+| POST | `/api/events` | 🔒 | Create an event (`title`, `event_date`, optional `start_time`/`end_time` as `HH:MM`, optional `label_ids`; empty or null times = all day) |
+| PUT | `/api/events/:id` | 🔒 | Update an event (404 if it doesn't exist; optional `label_ids` replaces the label set) |
 | DELETE | `/api/events/:id` | 🔒 | Delete an event |
+| GET | `/api/tasks` | 🔒 | List tasks; filters `due` (`overdue`/`today`/`upcoming`/`actionable`/`all`), `status`, and optional `from`/`to` dates |
+| POST | `/api/tasks` | 🔒 | Create a task (`title`, `due_date`, optional `due_time`, `priority`, `page_id`, `label_ids`) |
+| PATCH | `/api/tasks/:id` | 🔒 | Partial update (`title`, `due_date`, `due_time`, `status`, `priority`, `page_id`, `label_ids`) |
+| DELETE | `/api/tasks/:id` | 🔒 | Delete a task |
+| GET | `/api/labels` | 🔒 | List the account's labels (`id`, `name`, `color`) |
+| POST | `/api/labels` | 🔒 | Create a label (`name`, optional `color`) |
+| PATCH | `/api/labels/:id` | 🔒 | Rename and/or recolor a label (`name`, optional `color`) |
+| DELETE | `/api/labels/:id` | 🔒 | Delete a label; relations cascade |
+| GET | `/api/labels/:id/items` | 🔒 | Everything carrying the label, grouped as `pages`, `tasks`, `events` |
 
 `GET /api/files/:id` is unauthenticated on purpose: a shared page is viewable by anyone
 with the link, and its embedded images have to load the same way. The R2 bucket stays
@@ -481,7 +518,13 @@ cp .env.example .dev.vars
 | `AUTH_USERNAME` | yes | Username for the **first admin account** — it seeds the `users` table on the first request |
 | `AUTH_PASSWORD` | yes | Password for that first admin — use a strong one |
 | `AUTH_SECRET` | yes | Long random string for signing bearer tokens. Generate with `openssl rand -hex 32`. Rotating it **invalidates every token issued so far**, which is what you want if one ever leaks. |
+| `FEATURES` | no | Comma-separated module list (`tasks`, `google`). Default: all known modules. `FEATURES=none` disables optional modules; disabling `tasks` hides the Tasks page and makes `/api/tasks` return 404. Labels are always on. |
+| `TIMEZONE` | no | IANA timezone used to decide “today”, task buckets and the H-1 amber warning. Default: `Asia/Jakarta`. |
 | `PARASTI_DB_PATH` | no | Override the local SQLite path (default `./data/parasti.db`) |
+
+`FEATURES` and `TIMEZONE` are plain variables, not secrets. In production/staging set
+them as Worker variables in `wrangler.jsonc` (`"vars"`) or in the dashboard under
+**Settings → Variables and secrets**. In local dev, add them to `.dev.vars`.
 
 **Local** — read from `.dev.vars` by both `wrangler dev` and the local Express server.
 
@@ -498,7 +541,7 @@ and password changes live in the `users` table.
 
 Parasti ships an MCP server, so AI assistants can read and write your workspace.
 Requires the `api_tokens` table (migration `0005_api_tokens.sql`). Each account has its
-own tokens, and a token only sees its owner's pages.
+own tokens, and a token only sees its owner's data.
 
 Generate a token from **Account & Settings → API / MCP Token** in the app, then:
 
@@ -507,10 +550,11 @@ pnpm run mcp        # start the MCP server on stdio
 pnpm run test:mcp   # run the end-to-end test suite
 ```
 
-It can import Markdown content and `.md` files into pages, list your pages and inspect the
-hierarchy, and search pages and blocks.
+It can import Markdown, inspect and search pages, manage tasks and calendar events,
+create projects, upload images, and browse labels (`list_labels`, `find_by_label`).
+`get_config` reports enabled modules and the institution timezone.
 
-Client configuration for Claude Desktop, Cursor and Zed is in
+Client configuration for Claude Desktop, Cursor and Zed, plus the full tool list, is in
 [`mcp/README.md`](mcp/README.md).
 
 ---
@@ -521,6 +565,13 @@ Client configuration for Claude Desktop, Cursor and Zed is in
   PBKDF2-SHA256 (100,000 iterations, per-user salt and iteration count). 24h HMAC-SHA256
   bearer tokens, constant-time comparisons, login rate-limited to 5 attempts per minute per
   IP. Every data query is scoped to the owner; accessing someone else's item returns 404.
+- **Tasks** — per-account, not blocks. `due_date` is required, `due_time` is optional, and
+  the Today/Overdue buckets follow `TIMEZONE`, not the browser clock. Priorities order
+  tasks within the same due date (`high` → `normal` → `low`). Tasks due today or tomorrow
+  (H-1) show an amber date; overdue stays red.
+- **Labels** — per-account names with an optional palette color. One label can tag pages,
+  tasks and events; deleting a label removes its relations via `ON DELETE CASCADE`. Search
+  (Ctrl+K) matches label names, and `/labels/:id` groups all tagged items.
 - **CORS** — same-origin only; the frontend and `/api` share a host.
 - **Foreign keys** — `PRAGMA foreign_keys = ON` runs on every D1 request, because D1
   connections start with FKs off.

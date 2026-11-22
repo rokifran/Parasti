@@ -53,7 +53,7 @@ sharing one username and password.
 | `list_events` | `from` *(string, optional, `YYYY-MM-DD`)*<br>`to` *(string, optional, `YYYY-MM-DD`)* | Lists events, optionally restricted to an inclusive date range. Provide both bounds or neither. |
 | `update_event` | `eventId` *(string, required)*<br>`title` *(string, required)*<br>`event_date` *(string, required, `YYYY-MM-DD`)*<br>`start_time` *(string, optional, `HH:MM`)*<br>`end_time` *(string, optional, `HH:MM`)* | Replaces an event. All fields must be supplied; this is not a partial update. |
 | `delete_event` | `eventId` *(string, required)* | Permanently deletes an event. Destructive: only call after the user confirms. |
-| `list_tasks` | `due` *(string, optional: `overdue` \| `today` \| `upcoming` \| `actionable` \| `all`, default `actionable`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled` \| `all`)* | Lists tasks. `actionable` means overdue + today; "today" follows the institution timezone. |
+| `list_tasks` | `due` *(string, optional: `overdue` \| `today` \| `upcoming` \| `actionable` \| `all`, default `actionable`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled` \| `all`)* | Lists tasks. `actionable` means overdue + today; "today" follows the institution timezone. Each task includes its `priority` and `labels`. |
 | `create_task` | `title` *(string, required)*<br>`due_date` *(string, required, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)*<br>`pageId` *(string, optional)* | Creates a task. Omit `due_time` for an all-day task. Optionally links it to a page you own. |
 | `complete_task` | `id` *(string, required)* | Marks a task as done. |
 | `update_task` | `id` *(string, required)*<br>`title` *(string, optional)*<br>`due_date` *(string, optional, `YYYY-MM-DD`)*<br>`due_time` *(string, optional, `HH:MM`)*<br>`status` *(string, optional: `open` \| `done` \| `cancelled`)*<br>`pageId` *(string, optional)* | Partial update: renames, reschedules, reopens, cancels, or links/unlinks a page. Empty `due_time` clears the time; empty `pageId` unlinks. Only passed fields change. |
@@ -79,6 +79,7 @@ sharing one username and password.
 - "Hapus tugas <id>."
 - "What do I have under the label 'diet'?"
 - "List my labels."
+- "Tugas diet apa yang harus kukerjakan hari ini?"
 - "Fitur apa saja yang aktif di instansi Parasti-ku?"
 
 The agent reads tasks through `list_tasks`; overdue and today are decided by

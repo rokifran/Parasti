@@ -903,6 +903,17 @@ app.put('/api/pages/:id', (req, res) => {
   const existing: any = db.prepare('SELECT deleted_at FROM pages WHERE id = ?').get(id);
   if (!existing || !pageOwnedBy(id, user.id) || existing.deleted_at) return res.status(404).json({ error: 'Not found' });
 
+  // Moving a page must not create a cycle and must stay inside the owner's tree.
+  if (typeof body.parent_id === 'string' && body.parent_id) {
+    const parentId = body.parent_id;
+    const parent: any = db.prepare(
+      'SELECT deleted_at FROM pages WHERE id = ? AND owner_user_id = ?'
+    ).get(parentId, user.id);
+    if (!parent || parent.deleted_at) return res.status(400).json({ error: 'Invalid parent' });
+    const descendants = collectDescendantPageIds(id);
+    if (descendants.includes(parentId)) return res.status(400).json({ error: 'Invalid parent' });
+  }
+
   const lv = extractLabelIds(body as Record<string, unknown>);
   if ('error' in lv) return res.status(400).json({ error: lv.error });
   const labelIds = lv.value;

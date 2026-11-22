@@ -24,6 +24,8 @@ events, tasks, colored labels, image and file uploads, and a bilingual interface
   tables, quotes, callouts, images, files, subpages, web bookmarks and embeds (YouTube,
   Vimeo, Loom, Figma, Google Maps, CodePen, Spotify).
 - **Nested pages** — a page can hold subpages, and deleting a page cascades to them.
+- **Move pages** — use the page menu to move a page (with its subtree) to another
+  project, under any page, or back to the Private section.
 - **Drag & drop** — move blocks around, nest them by dropping in the middle, and drop an
   image or document straight into the page to upload it.
 - **Public share links** — one click to publish a page (and its subpages) read-only.

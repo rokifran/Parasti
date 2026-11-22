@@ -295,6 +295,74 @@ body {
   line-height: 1;
 }
 
+.move-page-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.move-page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.move-page-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 8px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.move-page-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.move-page-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.move-page-option--root {
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+}
+
+.move-page-option-icon {
+  width: 18px;
+  flex: none;
+  text-align: center;
+}
+
+.move-page-option-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-page-option-badge {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.move-page-loading {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
 .page-title {
   font-size: 40px;
   font-weight: 700;

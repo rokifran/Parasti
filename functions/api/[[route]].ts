@@ -1287,6 +1287,17 @@ app.put('/pages/:id', async (c) => {
   const existing: any = await c.env.DB.prepare('SELECT deleted_at FROM pages WHERE id = ?').bind(id).first();
   if (!existing || !(await pageOwnedBy(c.env.DB, id, user.id)) || existing.deleted_at) return c.json({ error: 'Not found' }, 404);
 
+  // Moving a page must not create a cycle and must stay inside the owner's tree.
+  if (typeof body.parent_id === 'string' && body.parent_id) {
+    const parentId = body.parent_id;
+    const parent: any = await c.env.DB.prepare(
+      'SELECT deleted_at FROM pages WHERE id = ? AND owner_user_id = ?'
+    ).bind(parentId, user.id).first();
+    if (!parent || parent.deleted_at) return c.json({ error: 'Invalid parent' }, 400);
+    const descendants = await collectDescendantPageIds(c, id);
+    if (descendants.includes(parentId)) return c.json({ error: 'Invalid parent' }, 400);
+  }
+
   const lv = extractLabelIds((body || {}) as Record<string, unknown>);
   if ('error' in lv) return c.json({ error: lv.error }, 400);
   const labelIds = lv.value;

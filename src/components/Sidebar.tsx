@@ -25,6 +25,7 @@ import {
   CalendarIcon,
   CheckSquareIcon,
   PencilIcon,
+  MoveIcon,
 } from './Icons';
 import { StarIcon, StarFilledIcon, DuplicateIcon } from './PageIcons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -39,6 +40,7 @@ import { ImportModal } from './ImportModal';
 import { LabelCreateModal } from './LabelCreateModal';
 import { LabelEditModal } from './LabelEditModal';
 import { NewPageModal, NewPageRequest } from './NewPageModal';
+import { MovePageModal } from './MovePageModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { TrashModal } from './TrashModal';
@@ -143,9 +145,10 @@ type PageTreeItemProps = {
   level?: number;
   collapsed: boolean;
   onCreateChild: (parentId: string) => void;
+  onRequestMove: (page: Page) => void;
 };
 
-const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed, onCreateChild }: PageTreeItemProps) {
+const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed, onCreateChild, onRequestMove }: PageTreeItemProps) {
   const { id: currentId } = useParams();
   const isParentOfActive = hasDescendant(page, currentId);
   const [manuallyExpanded, setManuallyExpanded] = React.useState<boolean | null>(null);
@@ -236,6 +239,11 @@ const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed, on
       icon: <DuplicateIcon size={14} />,
       onClick: handleDuplicate,
     },
+    ...(!(page.is_project && !page.parent_id) ? [{
+      label: t('page.moveTo'),
+      icon: <MoveIcon size={14} />,
+      onClick: () => onRequestMove(page),
+    }] : []),
     { divider: true },
     {
       label: t('page.moveToTrash'),
@@ -461,7 +469,7 @@ const PageTreeItem = memo(function PageTreeItem({ page, level = 0, collapsed, on
       {expanded && hasChildren && (
         <div className="page-children">
           {page.children!.map(child => (
-            <PageTreeItem key={child.id} page={child} level={level + 1} collapsed={collapsed} onCreateChild={onCreateChild} />
+            <PageTreeItem key={child.id} page={child} level={level + 1} collapsed={collapsed} onCreateChild={onCreateChild} onRequestMove={onRequestMove} />
           ))}
         </div>
       )}
@@ -499,6 +507,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
   const [deletingLabel, setDeletingLabel] = useState<Label | null>(null);
   const [removingLabel, setRemovingLabel] = useState(false);
   const [newPageRequest, setNewPageRequest] = useState<NewPageRequest | null>(null);
+  const [movingPage, setMovingPage] = useState<Page | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const workspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const userAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -614,6 +623,10 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
 
   const openCreateChild = useCallback((parentId: string) => {
     setNewPageRequest({ kind: 'page', parentId, insertSubpageBlock: true });
+  }, []);
+
+  const openMovePage = useCallback((p: Page) => {
+    setMovingPage(p);
   }, []);
 
   const removeLabel = async () => {
@@ -836,7 +849,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   onDrop={() => handleRootDrop(projectTree)}
                 >
                   {projectTree.map((page) => (
-                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} />
+                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} onRequestMove={openMovePage} />
                   ))}
                 </div>
               )}
@@ -870,7 +883,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
                   onDrop={() => handleRootDrop(privateTree)}
                 >
                   {privateTree.map((page) => (
-                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} />
+                    <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} onRequestMove={openMovePage} />
                   ))}
                 </div>
               )}
@@ -941,7 +954,7 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
           {collapsed && (
             <div className="sidebar-collapsed-tree">
               {tree.map((page) => (
-                <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} />
+                <PageTreeItem key={page.id} page={page} collapsed={collapsed} onCreateChild={openCreateChild} onRequestMove={openMovePage} />
               ))}
             </div>
           )}
@@ -1164,6 +1177,11 @@ export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void } = {}) {
       <NewPageModal
         request={newPageRequest}
         onClose={() => setNewPageRequest(null)}
+      />
+
+      <MovePageModal
+        page={movingPage}
+        onClose={() => setMovingPage(null)}
       />
 
       <ConfirmDialog

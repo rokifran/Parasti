@@ -242,19 +242,28 @@ body {
 }
 
 .page-icon-btn--empty {
-  width: 40px;
-  height: 40px;
+  width: auto;
+  height: auto;
+  min-height: 30px;
   margin-top: 8px;
+  padding: 4px 10px;
+  gap: 6px;
   justify-content: center;
   border: 1px dashed var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   color: var(--text-tertiary);
+  font-size: var(--fs-sm);
 }
 
 .page-icon-btn--empty:hover {
   border-color: var(--accent);
   color: var(--accent-text);
   background: transparent;
+}
+
+.page-icon-add-text {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
 }
 
 .new-page-icon-btn {

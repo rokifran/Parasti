@@ -354,7 +354,12 @@ export function PageView() {
             title={page.icon ? t('page.changeIcon') : t('page.addIcon')}
             aria-label={page.icon ? t('page.changeIcon') : t('page.addIcon')}
           >
-            {page.icon || <PlusIcon size={16} />}
+            {page.icon || (
+              <>
+                <PlusIcon size={14} />
+                <span className="page-icon-add-text">{t('page.addIcon')}</span>
+              </>
+            )}
           </button>
         )}
 

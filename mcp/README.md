@@ -47,7 +47,7 @@ sharing one username and password.
 | `import_markdown` | `markdown` *(string, required)*<br>`title` *(string, optional)*<br>`parentId` *(string, optional)* | Imports raw Markdown content as a new page divided into blocks (headings, todos, code blocks, tables, KaTeX, etc.). |
 | `import_markdown_file` | `filePath` *(string, required)*<br>`title` *(string, optional)*<br>`parentId` *(string, optional)* | Reads a local `.md` file from disk and imports it as a new page. |
 | `list_pages` | *(none)* | Returns the workspace page hierarchy with icon, title, ID, and relationship (`root` or `parent`). |
-| `search_pages` | `query` *(string, required)* | Searches for text within all pages and blocks. |
+| `search_pages` | `query` *(string, required)* | Searches page titles, block contents and label names. |
 | `get_page` | `pageId` *(string, required)* | Retrieves the full page object and all ordered blocks. |
 | `create_event` | `title` *(string, required)*<br>`event_date` *(string, required, `YYYY-MM-DD`)*<br>`start_time` *(string, optional, `HH:MM`)*<br>`end_time` *(string, optional, `HH:MM`)* | Creates a calendar event. Omit both times for an all-day event. |
 | `list_events` | `from` *(string, optional, `YYYY-MM-DD`)*<br>`to` *(string, optional, `YYYY-MM-DD`)* | Lists events, optionally restricted to an inclusive date range. Provide both bounds or neither. |

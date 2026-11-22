@@ -203,9 +203,20 @@ function positionBetween(prev?: number, next?: number): number {
 }
 
 // Create MCP server instance
+const packageVersion = (() => {
+  for (const rel of ['./package.json', '../package.json']) {
+    try {
+      return JSON.parse(fs.readFileSync(new URL(rel, import.meta.url), 'utf8')).version as string;
+    } catch {
+      // Try the next location (source vs compiled dist/).
+    }
+  }
+  return '0.0.0';
+})();
+
 const server = new McpServer({
   name: 'parasti-mcp',
-  version: '1.1.0',
+  version: packageVersion,
 });
 
 // Tool: import_markdown
@@ -337,7 +348,7 @@ server.tool(
 // Tool: search_pages
 server.tool(
   'search_pages',
-  'Search for pages or block contents in Parasti.',
+  'Search page titles, block contents and label names in Parasti.',
   {
     query: z.string().describe('Search query string'),
   },
@@ -352,7 +363,14 @@ server.tool(
       }
 
       const formatted = results.map((r) => {
-        return `- [${r.page_title || 'Untitled'}] (Page ID: ${r.page_id})\n  Match: ${r.content || ''}`;
+        if (r.match_type === 'label') {
+          return `- [Label: ${r.title || 'Untitled'}] (Label ID: ${r.id})`;
+        }
+        const kind = r.match_type === 'block'
+          ? (r.block_type ? `block ${r.block_type}` : 'block')
+          : 'page';
+        const pageId = r.page_id ? `, Page ID: ${r.page_id}` : '';
+        return `- [${r.title || 'Untitled'}] (${kind}${pageId})\n  Match: ${r.snippet || ''}`;
       });
 
       return {

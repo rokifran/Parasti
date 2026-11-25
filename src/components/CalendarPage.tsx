@@ -14,7 +14,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { LabelPickerModal } from './LabelPickerModal';
 import { LabelChip } from './LabelChip';
 import { TaskEditModal } from './TaskEditModal';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightSmallIcon, PlusIcon, XIcon } from './Icons';
+import { CalendarIcon, CheckSquareIcon, ChevronLeftIcon, ChevronRightSmallIcon, PlusIcon, XIcon } from './Icons';
 
 type View = 'day' | 'month' | 'year';
 
@@ -275,7 +275,8 @@ export function CalendarPage() {
             {monthGrid(year, cursor.getMonth()).map((d, i) => {
               const key = toKey(d);
               const outside = d.getMonth() !== cursor.getMonth();
-              const hasEvents = (byDate.get(key)?.length ?? 0) > 0;
+              const eventCount = byDate.get(key)?.length ?? 0;
+              const taskCount = tasks.filter(task => task.due_date === key).length;
               return (
                 <button
                   key={i}
@@ -284,7 +285,16 @@ export function CalendarPage() {
                   onClick={() => openDay(d)}
                 >
                   <span className="calendar-cell-day">{dayLabel(d)}</span>
-                  {hasEvents && <span className="calendar-event-dot" />}
+                  {eventCount > 0 && (
+                    <span className="calendar-cell-count" title={`${eventCount} event`}>
+                      <span className="calendar-event-dot" /> {eventCount}
+                    </span>
+                  )}
+                  {taskCount > 0 && (
+                    <span className="calendar-cell-count calendar-cell-count--task" title={`${taskCount} task`}>
+                      <CheckSquareIcon size={11} /> {taskCount}
+                    </span>
+                  )}
                 </button>
               );
             })}

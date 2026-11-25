@@ -403,6 +403,10 @@
   cursor: pointer;
   text-align: left;
   color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 
 .calendar-cell:hover {
@@ -431,6 +435,30 @@
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+/* Per-day item counts in month cells: dot+number for events, check+number
+   for tasks; the dot is static here, not absolutely positioned. */
+.calendar-cell-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: auto;
+}
+
+.calendar-cell-count .calendar-event-dot {
+  position: static;
+}
+
+.calendar-cell-count--task {
+  color: var(--text-secondary);
+}
+
+.calendar-cell-count--task svg {
+  color: var(--accent);
 }
 
 /* Year view ---------------------------------------------------------------- */

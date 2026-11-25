@@ -467,51 +467,55 @@ function DayView({ cursor, events, tasks, now, onOpenEvent, onOpenTask, onToggle
               <span className="calendar-hour-label">{hourFmt.format(new Date(2024, 0, 1, h))}</span>
             </div>
           ))}
-          {timed.map(({ kind, item, start, end, col, cols }) => {
-            const task = kind === 'task' ? (item as Task) : null;
-            const event = kind === 'event' ? (item as CalendarEvent) : null;
-            const done = task !== null && task.status !== 'open';
-            return (
-              <div
-                key={`${kind}-${item.id}`}
-                className={`calendar-day-block ${task ? 'calendar-day-block--task' : ''} ${done ? 'calendar-day-block--done' : ''}`}
-                style={{
-                  top: (start / 1440) * 24 * HOUR_HEIGHT,
-                  height: Math.max(((end - start) / 1440) * 24 * HOUR_HEIGHT, 20),
-                  left: `calc(var(--calendar-gutter) + ${col * 100 / cols}%)`,
-                  width: `calc(${100 / cols}% - 4px)`,
-                  ...chipStyle(blockColor((task ?? event)?.labels)),
-                } as React.CSSProperties}
-                role="button"
-                tabIndex={0}
-                onClick={e => { e.stopPropagation(); task ? onOpenTask(task) : event && onOpenEvent(event); }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.stopPropagation();
-                    task ? onOpenTask(task) : event && onOpenEvent(event);
-                  }
-                }}
-              >
-                {task && (
-                  <input
-                    type="checkbox"
-                    className="calendar-day-block-check"
-                    checked={task.status === 'done'}
-                    onChange={() => onToggleTask(task)}
-                    onClick={e => e.stopPropagation()}
-                    aria-label={t('calendar.task')}
-                  />
-                )}
-                <span className="calendar-day-block-title">{item.title}</span>
-                <span className="calendar-day-block-time">{hm(start)} – {hm(end)}</span>
+          {/* Lane right of the time gutter: block percentages resolve against
+              the lane, not the whole grid, so nothing overflows horizontally. */}
+          <div className="calendar-day-lane">
+            {timed.map(({ kind, item, start, end, col, cols }) => {
+              const task = kind === 'task' ? (item as Task) : null;
+              const event = kind === 'event' ? (item as CalendarEvent) : null;
+              const done = task !== null && task.status !== 'open';
+              return (
+                <div
+                  key={`${kind}-${item.id}`}
+                  className={`calendar-day-block ${task ? 'calendar-day-block--task' : ''} ${done ? 'calendar-day-block--done' : ''}`}
+                  style={{
+                    top: (start / 1440) * 24 * HOUR_HEIGHT,
+                    height: Math.max(((end - start) / 1440) * 24 * HOUR_HEIGHT, 20),
+                    left: `${col * 100 / cols}%`,
+                    width: `calc(${100 / cols}% - 4px)`,
+                    ...chipStyle(blockColor((task ?? event)?.labels)),
+                  } as React.CSSProperties}
+                  role="button"
+                  tabIndex={0}
+                  onClick={e => { e.stopPropagation(); task ? onOpenTask(task) : event && onOpenEvent(event); }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                      task ? onOpenTask(task) : event && onOpenEvent(event);
+                    }
+                  }}
+                >
+                  {task && (
+                    <input
+                      type="checkbox"
+                      className="calendar-day-block-check"
+                      checked={task.status === 'done'}
+                      onChange={() => onToggleTask(task)}
+                      onClick={e => e.stopPropagation()}
+                      aria-label={t('calendar.task')}
+                    />
+                  )}
+                  <span className="calendar-day-block-title">{item.title}</span>
+                  <span className="calendar-day-block-time">{hm(start)} – {hm(end)}</span>
+                </div>
+              );
+            })}
+            {isToday && (
+              <div className="calendar-now-line" style={{ top: (nowMinutes / 1440) * 24 * HOUR_HEIGHT }}>
+                <span className="calendar-now-dot" />
               </div>
-            );
-          })}
-          {isToday && (
-            <div className="calendar-now-line" style={{ top: (nowMinutes / 1440) * 24 * HOUR_HEIGHT }}>
-              <span className="calendar-now-dot" />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

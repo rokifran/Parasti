@@ -261,7 +261,18 @@
 
 .calendar-day-scroll {
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+}
+
+/* Everything right of the time gutter; block percentages resolve against this
+   lane so they can never spill past the grid edge. */
+.calendar-day-lane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--calendar-gutter, 64px);
+  right: 0;
 }
 
 .calendar-day-hours {
@@ -345,7 +356,7 @@
 .calendar-now-dot {
   position: absolute;
   top: -5px;
-  left: calc(var(--calendar-gutter, 64px) - 12px);
+  left: -12px;
   width: 8px;
   height: 8px;
   border-radius: 50%;

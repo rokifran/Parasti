@@ -547,6 +547,8 @@ export const es: Record<TranslationKey, string> = {
   'calendar.endTime': 'Fin',
   'calendar.allDay': 'Todo el día',
   'calendar.noEvents': 'Sin eventos',
+  'calendar.task': 'Tarea',
+  'calendar.gmt': 'GMT',
   'calendar.titleRequired': 'El título es obligatorio',
   'calendar.deleteEvent': 'Eliminar evento',
   'calendar.confirmDeleteTitle': '¿Eliminar "{title}"?',

@@ -546,6 +546,8 @@ export const en = {
   'calendar.endTime': 'End',
   'calendar.allDay': 'All day',
   'calendar.noEvents': 'No events',
+  'calendar.task': 'Task',
+  'calendar.gmt': 'GMT',
   'calendar.titleRequired': 'Title is required',
   'calendar.deleteEvent': 'Delete event',
   'calendar.confirmDeleteTitle': 'Delete "{title}"?',

@@ -24,7 +24,6 @@ const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), 
 // Month/year stepping always lands on day 1 so the cursor stays a valid
 // representative of the period (addMonths rolls over long months cleanly).
 const addMonths = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth() + n, 1);
-const todayKey = toKey(new Date());
 
 // Monday-first 6-row (42-cell) grid for one month, used by both the big month
 // view and the mini months in the year view.
@@ -128,6 +127,9 @@ export function CalendarPage() {
     const id = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(id);
   }, []);
+  // Recomputed from the `now` state so the today highlight stays correct when
+  // the tab sits open across midnight (a module-level constant would go stale).
+  const todayKey = toKey(now);
 
   // `replace` for in-place adjustments (prev/next/today), push for view
   // changes and date picks, so back undoes the "navigation" steps first.
@@ -286,12 +288,12 @@ export function CalendarPage() {
                 >
                   <span className="calendar-cell-day">{dayLabel(d)}</span>
                   {eventCount > 0 && (
-                    <span className="calendar-cell-count" title={`${eventCount} event`}>
+                    <span className="calendar-cell-count" title={t(eventCount === 1 ? 'calendar.eventCount_one' : 'calendar.eventCount_other', { count: eventCount })}>
                       <span className="calendar-event-dot" /> {eventCount}
                     </span>
                   )}
                   {taskCount > 0 && (
-                    <span className="calendar-cell-count calendar-cell-count--task" title={`${taskCount} task`}>
+                    <span className="calendar-cell-count calendar-cell-count--task" title={t(taskCount === 1 ? 'calendar.taskCount_one' : 'calendar.taskCount_other', { count: taskCount })}>
                       <CheckSquareIcon size={11} /> {taskCount}
                     </span>
                   )}
@@ -454,7 +456,7 @@ function DayView({ cursor, events, tasks, now, onOpenEvent, onOpenTask, onToggle
                   type="checkbox"
                   checked={task.status === 'done'}
                   onChange={() => onToggleTask(task)}
-                  aria-label={t('calendar.task')}
+                  aria-label={`${t('calendar.task')}: ${task.title}`}
                 />
                 <button type="button" className="calendar-day-chip-title" onClick={() => onOpenTask(task)}>
                   {task.title}
@@ -512,11 +514,14 @@ function DayView({ cursor, events, tasks, now, onOpenEvent, onOpenTask, onToggle
                       checked={task.status === 'done'}
                       onChange={() => onToggleTask(task)}
                       onClick={e => e.stopPropagation()}
-                      aria-label={t('calendar.task')}
+                      aria-label={`${t('calendar.task')}: ${task.title}`}
                     />
                   )}
                   <span className="calendar-day-block-title">{item.title}</span>
-                  <span className="calendar-day-block-time">{hm(start)} – {hm(end)}</span>
+                  {/* A task has a due time, not a range: show only its start. */}
+                  <span className="calendar-day-block-time">
+                    {task ? hm(start) : `${hm(start)} – ${hm(end)}`}
+                  </span>
                 </div>
               );
             })}

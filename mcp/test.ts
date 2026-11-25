@@ -412,6 +412,39 @@ This is a **subpage** created from a local \`.md\` file on disk.
   console.log('[16/17] delete_event executed successfully.');
   console.log('Result:', deleteText);
 
+  // 16b. list_tasks with a due-date range (from/to)
+  console.log('\n[16b/17] Testing list_tasks with from/to range...');
+  const inTwoDays = localDate(2);
+  const taskTitle = `MCP Range Task ${Date.now()}`;
+  const taskText = await callTool('create_task', { title: taskTitle, due_date: inTwoDays });
+  if (!taskText.includes(taskTitle)) {
+    throw new Error(`create_task did not confirm the task: ${taskText}`);
+  }
+  const rangeText = await callTool('list_tasks', { from: today, to: inSevenDays });
+  if (!rangeText.includes(taskTitle)) {
+    throw new Error(`list_tasks range did not include the task: ${rangeText}`);
+  }
+  console.log('[16b/17] list_tasks range includes the task created for +2 days.');
+
+  // 16c. negative: a range with only one bound must be rejected by the tool,
+  // not passed through to a guaranteed 400 from the API.
+  console.log('\n[16c/17] Testing list_tasks with a one-bound range...');
+  let rejectedOneBound = false;
+  try {
+    const oneBound = await callTool('list_tasks', { from: today });
+    rejectedOneBound = oneBound.includes('Provide both "from" and "to"');
+  } catch (err: any) {
+    rejectedOneBound = String(err.message).includes('Provide both "from" and "to"');
+  }
+  if (!rejectedOneBound) throw new Error('list_tasks accepted a one-bound range');
+  console.log('[16c/17] list_tasks rejected the one-bound range as expected.');
+
+  // 16d. remove the task created for the range test
+  const createdTaskId = /ID: ([0-9a-f-]+)/.exec(taskText)?.[1];
+  if (createdTaskId) {
+    await callTool('delete_task', { id: createdTaskId });
+  }
+
   // 17. Remove the pages created by this run (cascade: subpages and uploads too)
   console.log('\n[17/17] Cleaning up test pages...');
   for (const pageId of [...createdPageIds].reverse()) {

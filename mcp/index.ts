@@ -466,7 +466,7 @@ server.tool(
 // Tool: list_events
 server.tool(
   'list_events',
-  'List calendar events in Parasti. Provide both from and to (YYYY-MM-DD) to filter a date range, or omit both to list every event.',
+  'List calendar events in Parasti. Provide both from and to (YYYY-MM-DD) to filter a date range, or omit both to list every event. Output includes each event\'s label names.',
   {
     from: z.string().optional().describe('Start date of the range, inclusive, in YYYY-MM-DD format. Requires to.'),
     to: z.string().optional().describe('End date of the range, inclusive, in YYYY-MM-DD format. Requires from.'),
@@ -501,7 +501,9 @@ server.tool(
             ? `${e.start_time}-${e.end_time}`
             : e.start_time
           : 'all-day';
-        return `- ${e.event_date} ${time} ${e.title} (ID: ${e.id})`;
+        const labels = (e.labels || []).map((l: { name: string }) => l.name);
+        const labelSuffix = labels.length ? ` [${labels.join(', ')}]` : '';
+        return `- ${e.event_date} ${time} ${e.title}${labelSuffix} (ID: ${e.id})`;
       });
 
       return {
@@ -600,16 +602,34 @@ server.tool(
 // Tool: list_tasks
 server.tool(
   'list_tasks',
-  'List tasks in Parasti. Can work through overdue tasks and today\'s tasks. "Today" follows the institution\'s TIMEZONE, not the server clock or the caller\'s timezone.',
+  'List tasks in Parasti. Can work through overdue tasks and today\'s tasks, or list tasks in a due-date range with from/to (YYYY-MM-DD). "Today" follows the institution\'s TIMEZONE, not the server clock or the caller\'s timezone.',
   {
-    due: z.enum(['overdue', 'today', 'upcoming', 'actionable', 'all']).optional().describe('Bucket to list. "actionable" = overdue + today. Defaults to actionable.'),
+    due: z.enum(['overdue', 'today', 'upcoming', 'actionable', 'all']).optional().describe('Bucket to list. "actionable" = overdue + today. Defaults to actionable, or to "all" when from/to is given. Ignored buckets still respect from/to when both are set.'),
     status: z.enum(['open', 'done', 'cancelled', 'all']).optional().describe('Status filter. Default: open for dated buckets, all when due is "all".'),
+    from: z.string().optional().describe('Start of a due-date range, inclusive, in YYYY-MM-DD format. Requires to. With a range, the default bucket becomes "all".'),
+    to: z.string().optional().describe('End of a due-date range, inclusive, in YYYY-MM-DD format. Requires from. With a range, the default bucket becomes "all".'),
   },
-  async ({ due, status }) => {
+  async ({ due, status, from, to }) => {
     try {
+      const hasFrom = Boolean(from && from.trim());
+      const hasTo = Boolean(to && to.trim());
+      // The API rejects a range with only one bound, so ask for both instead of
+      // passing through a guaranteed 400.
+      if (hasFrom !== hasTo) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: 'Provide both "from" and "to" (YYYY-MM-DD), or omit both to use buckets.' }],
+        };
+      }
       const query = new URLSearchParams();
-      query.set('due', due || 'actionable');
+      // A date range speaks for itself; only fall back to the actionable
+      // bucket when the caller did not ask for a range.
+      query.set('due', due || (hasFrom ? 'all' : 'actionable'));
       if (status) query.set('status', status);
+      if (hasFrom) {
+        query.set('from', from!.trim());
+        query.set('to', to!.trim());
+      }
       const res = await apiRequest<{ tasks: any[]; today: string; timezone: string }>(
         `/api/tasks?${query.toString()}`
       );
